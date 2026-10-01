@@ -23,6 +23,7 @@ bot = commands.Bot(
 
 CONFIG_FILE = "config.json"
 
+
 DEFAULT_CONFIG = {
     "ticket_enabled": False,
     "ticket_category": None,
@@ -44,8 +45,9 @@ DEFAULT_CONFIG = {
     "moderation_enabled": True
 }
 
+
 configs = {}
-user_languages = {}
+user_settings = {}
 voice_sessions = {}
 
 
@@ -54,7 +56,7 @@ voice_sessions = {}
 # =========================================================
 
 def load_config():
-    global configs, user_languages
+    global configs, user_settings
 
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -72,16 +74,45 @@ def load_config():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-            if "guilds" in data:
-                configs = data.get("guilds", {})
-                user_languages = data.get("users", {})
-            else:
-                configs = data
-                user_languages = {}
+        configs = data.get("guilds", {})
+
+        raw_users = data.get("users", {})
+        user_settings = {}
+
+        for user_id, value in raw_users.items():
+
+            # Eski sistem:
+            # "123456": "tr"
+            if isinstance(value, str):
+                language = value if value in ("tr", "en") else "tr"
+
+                user_settings[str(user_id)] = {
+                    "language": language,
+                    "voice_notifications": True
+                }
+
+            # Yeni sistem
+            elif isinstance(value, dict):
+
+                language = value.get(
+                    "language",
+                    "tr"
+                )
+
+                if language not in ("tr", "en"):
+                    language = "tr"
+
+                user_settings[str(user_id)] = {
+                    "language": language,
+                    "voice_notifications": value.get(
+                        "voice_notifications",
+                        True
+                    )
+                }
 
     except Exception:
         configs = {}
-        user_languages = {}
+        user_settings = {}
 
 
 def save_config():
@@ -89,7 +120,7 @@ def save_config():
         json.dump(
             {
                 "guilds": configs,
-                "users": user_languages
+                "users": user_settings
             },
             f,
             indent=4,
@@ -107,6 +138,7 @@ def get_config(guild_id):
     changed = False
 
     for key, value in DEFAULT_CONFIG.items():
+
         if key not in configs[guild_id]:
             configs[guild_id][key] = value
             changed = True
@@ -117,29 +149,72 @@ def get_config(guild_id):
     return configs[guild_id]
 
 
-def get_language(user_id):
+def get_user_settings(user_id):
+
     user_id = str(user_id)
 
-    language = user_languages.get(
-        user_id,
-        "tr"
-    )
-
-    if language not in ("tr", "en"):
-        language = "tr"
-        user_languages[user_id] = "tr"
+    if user_id not in user_settings:
+        user_settings[user_id] = {
+            "language": "tr",
+            "voice_notifications": True
+        }
         save_config()
 
-    return language
+    data = user_settings[user_id]
+
+    if "language" not in data:
+        data["language"] = "tr"
+
+    if data["language"] not in ("tr", "en"):
+        data["language"] = "tr"
+
+    if "voice_notifications" not in data:
+        data["voice_notifications"] = True
+
+    return data
+
+
+def get_language(user_id):
+
+    return get_user_settings(
+        user_id
+    )["language"]
 
 
 def set_language(user_id, language):
-    user_languages[str(user_id)] = language
+
+    data = get_user_settings(
+        user_id
+    )
+
+    data["language"] = language
+
+    save_config()
+
+
+def get_voice_notifications(user_id):
+
+    return get_user_settings(
+        user_id
+    )["voice_notifications"]
+
+
+def set_voice_notifications(user_id, enabled):
+
+    data = get_user_settings(
+        user_id
+    )
+
+    data["voice_notifications"] = enabled
+
     save_config()
 
 
 def t(user_id, key, **kwargs):
-    language = get_language(user_id)
+
+    language = get_language(
+        user_id
+    )
 
     text = TEXTS[language].get(
         key,
@@ -342,7 +417,16 @@ TEXTS = {
             "Tüm ayarlar sıfırlandı.",
 
         "ping_title":
-            "Dynex Ping"
+            "Dynex Ping durumu",
+
+        "ping_description":
+            "**Dynex**’in ping durumu",
+
+        "voice_disable":
+            "Ses Bildirimlerini Kapat",
+
+        "voice_enable":
+            "Ses Bildirimlerini Aç"
     },
 
     "en": {
@@ -558,7 +642,16 @@ TEXTS = {
             "All settings have been reset.",
 
         "ping_title":
-            "Dynex Ping"
+            "Dynex Ping Status",
+
+        "ping_description":
+            "**Dynex**'s ping status",
+
+        "voice_disable":
+            "Disable Voice Notifications",
+
+        "voice_enable":
+            "Enable Voice Notifications"
     }
 }
 
@@ -570,6 +663,7 @@ TEXTS = {
 class LanguageSelect(discord.ui.Select):
 
     def __init__(self):
+
         options = [
             discord.SelectOption(
                 label="Türkçe",
@@ -598,15 +692,17 @@ class LanguageSelect(discord.ui.Select):
 
         if new_language == current_language:
 
-            if new_language == "tr":
-                message = TEXTS["tr"]["already_tr"]
-            else:
-                message = TEXTS["en"]["already_en"]
+            message = (
+                TEXTS["tr"]["already_tr"]
+                if new_language == "tr"
+                else TEXTS["en"]["already_en"]
+            )
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> {message}",
                 ephemeral=True
             )
+
             return
 
         set_language(
@@ -614,10 +710,11 @@ class LanguageSelect(discord.ui.Select):
             new_language
         )
 
-        if new_language == "tr":
-            message = TEXTS["tr"]["language_changed_tr"]
-        else:
-            message = TEXTS["en"]["language_changed_en"]
+        message = (
+            TEXTS["tr"]["language_changed_tr"]
+            if new_language == "tr"
+            else TEXTS["en"]["language_changed_en"]
+        )
 
         await interaction.response.edit_message(
             content=f"🌐 {message}",
@@ -629,6 +726,7 @@ class LanguageSelect(discord.ui.Select):
 class LanguageView(discord.ui.View):
 
     def __init__(self):
+
         super().__init__(
             timeout=180
         )
@@ -678,15 +776,8 @@ def settings_embed(guild, user_id):
         else t(user_id, "not_set")
     )
 
-    enabled = t(
-        user_id,
-        "open"
-    )
-
-    disabled = t(
-        user_id,
-        "closed"
-    )
+    enabled = t(user_id, "open")
+    disabled = t(user_id, "closed")
 
     embed = discord.Embed(
         title=f"⚙️ {t(user_id, 'settings_title')}",
@@ -887,7 +978,9 @@ class TicketSettingsModal(discord.ui.Modal):
 
         await interaction.channel.send(
             embed=embed,
-            view=TicketPanelView()
+            view=TicketPanelView(
+                get_language(user_id)
+            )
         )
 
         await interaction.response.send_message(
@@ -904,8 +997,6 @@ class TicketSettingsModal(discord.ui.Modal):
 class TicketProblemModal(discord.ui.Modal):
 
     def __init__(self, user_id):
-
-        self.user_id = user_id
 
         language = get_language(
             user_id
@@ -1051,7 +1142,9 @@ class TicketProblemModal(discord.ui.Modal):
                 f"{interaction.user.mention}"
             ),
             embed=embed,
-            view=TicketCloseView()
+            view=TicketCloseView(
+                get_language(user_id)
+            )
         )
 
         await interaction.response.send_message(
@@ -1069,8 +1162,6 @@ class TicketProblemModal(discord.ui.Modal):
 class AddMemberModal(discord.ui.Modal):
 
     def __init__(self, user_id):
-
-        self.user_id = user_id
 
         language = get_language(
             user_id
@@ -1172,7 +1263,6 @@ class AddMemberModal(discord.ui.Modal):
                 member = await interaction.guild.fetch_member(
                     member_id
                 )
-
             except Exception:
                 member = None
 
@@ -1220,22 +1310,25 @@ class AddMemberModal(discord.ui.Modal):
 
 class TicketPanelView(discord.ui.View):
 
-    def __init__(self):
+    def __init__(self, language="tr"):
+
         super().__init__(
             timeout=None
         )
 
-    @discord.ui.button(
-        label="Ticket Aç",
-        emoji="🎫",
-        style=discord.ButtonStyle.primary,
-        custom_id="dynex_ticket_create"
-    )
-    async def create_ticket(
-        self,
-        interaction,
-        button
-    ):
+        self.language = language
+
+        button = discord.ui.Button(
+            label=TEXTS[language]["create_ticket"],
+            emoji="🎫",
+            style=discord.ButtonStyle.primary,
+            custom_id="dynex_ticket_create"
+        )
+
+        button.callback = self.create_ticket
+        self.add_item(button)
+
+    async def create_ticket(self, interaction):
 
         await interaction.response.send_modal(
             TicketProblemModal(
@@ -1250,22 +1343,35 @@ class TicketPanelView(discord.ui.View):
 
 class TicketCloseView(discord.ui.View):
 
-    def __init__(self):
+    def __init__(self, language="tr"):
+
         super().__init__(
             timeout=None
         )
 
-    @discord.ui.button(
-        label="Ticket Kapat",
-        emoji="🔒",
-        style=discord.ButtonStyle.danger,
-        custom_id="dynex_ticket_close"
-    )
-    async def close_ticket(
-        self,
-        interaction,
-        button
-    ):
+        self.language = language
+
+        close_button = discord.ui.Button(
+            label=TEXTS[language]["close_ticket"],
+            emoji="🔒",
+            style=discord.ButtonStyle.danger,
+            custom_id="dynex_ticket_close"
+        )
+
+        add_button = discord.ui.Button(
+            label=TEXTS[language]["add_member"],
+            emoji="👤",
+            style=discord.ButtonStyle.primary,
+            custom_id="dynex_ticket_add_member"
+        )
+
+        close_button.callback = self.close_ticket
+        add_button.callback = self.add_member
+
+        self.add_item(close_button)
+        self.add_item(add_button)
+
+    async def close_ticket(self, interaction):
 
         user_id = interaction.user.id
         guild_id = interaction.guild.id
@@ -1328,21 +1434,10 @@ class TicketCloseView(discord.ui.View):
             await interaction.channel.delete(
                 reason=f"Ticket closed by {interaction.user}"
             )
-
         except Exception:
             pass
 
-    @discord.ui.button(
-        label="Üye Ekle",
-        emoji="👤",
-        style=discord.ButtonStyle.primary,
-        custom_id="dynex_ticket_add_member"
-    )
-    async def add_member(
-        self,
-        interaction,
-        button
-    ):
+    async def add_member(self, interaction):
 
         user_id = interaction.user.id
         guild_id = interaction.guild.id
@@ -1410,8 +1505,6 @@ class LogModal(discord.ui.Modal):
 
     def __init__(self, user_id):
 
-        self.user_id = user_id
-
         language = get_language(
             user_id
         )
@@ -1440,7 +1533,6 @@ class LogModal(discord.ui.Modal):
             channel_id = int(
                 self.channel_id.value
             )
-
         except Exception:
 
             await interaction.response.send_message(
@@ -1492,8 +1584,6 @@ class WelcomeModal(discord.ui.Modal):
 
     def __init__(self, user_id):
 
-        self.user_id = user_id
-
         language = get_language(
             user_id
         )
@@ -1517,13 +1607,8 @@ class WelcomeModal(discord.ui.Modal):
             max_length=1000
         )
 
-        self.add_item(
-            self.channel_id
-        )
-
-        self.add_item(
-            self.message
-        )
+        self.add_item(self.channel_id)
+        self.add_item(self.message)
 
     async def on_submit(self, interaction):
 
@@ -1534,7 +1619,6 @@ class WelcomeModal(discord.ui.Modal):
             channel_id = int(
                 self.channel_id.value
             )
-
         except Exception:
 
             await interaction.response.send_message(
@@ -1587,8 +1671,6 @@ class AutoroleModal(discord.ui.Modal):
 
     def __init__(self, user_id):
 
-        self.user_id = user_id
-
         language = get_language(
             user_id
         )
@@ -1617,7 +1699,6 @@ class AutoroleModal(discord.ui.Modal):
             role_id = int(
                 self.role_id.value
             )
-
         except Exception:
 
             await interaction.response.send_message(
@@ -1664,21 +1745,102 @@ class AutoroleModal(discord.ui.Modal):
 
 class SettingsView(discord.ui.View):
 
-    def __init__(self):
+    def __init__(self, user_id):
+
         super().__init__(
             timeout=300
         )
 
-    @discord.ui.button(
-        label="Ticket",
-        emoji="🎫",
-        style=discord.ButtonStyle.primary
-    )
-    async def ticket(
+        language = get_language(
+            user_id
+        )
+
+        self.add_item(
+            self.make_button(
+                TEXTS[language]["ticket"],
+                "🎫",
+                discord.ButtonStyle.primary,
+                self.ticket
+            )
+        )
+
+        self.add_item(
+            self.make_button(
+                TEXTS[language]["log"],
+                "📋",
+                discord.ButtonStyle.secondary,
+                self.log
+            )
+        )
+
+        self.add_item(
+            self.make_button(
+                TEXTS[language]["welcome"],
+                "👋",
+                discord.ButtonStyle.secondary,
+                self.welcome
+            )
+        )
+
+        self.add_item(
+            self.make_button(
+                TEXTS[language]["autorole"],
+                "🎭",
+                discord.ButtonStyle.secondary,
+                self.autorole
+            )
+        )
+
+        self.add_item(
+            self.make_button(
+                TEXTS[language]["moderation"],
+                "🛡️",
+                discord.ButtonStyle.secondary,
+                self.moderation
+            )
+        )
+
+        self.add_item(
+            self.make_button(
+                TEXTS[language]["refresh"],
+                "🔄",
+                discord.ButtonStyle.success,
+                self.refresh,
+                row=1
+            )
+        )
+
+        self.add_item(
+            self.make_button(
+                TEXTS[language]["reset"],
+                "🗑️",
+                discord.ButtonStyle.danger,
+                self.reset,
+                row=1
+            )
+        )
+
+    def make_button(
         self,
-        interaction,
-        button
+        label,
+        emoji,
+        style,
+        callback,
+        row=None
     ):
+
+        button = discord.ui.Button(
+            label=label,
+            emoji=emoji,
+            style=style,
+            row=row
+        )
+
+        button.callback = callback
+
+        return button
+
+    async def ticket(self, interaction):
 
         await interaction.response.send_modal(
             TicketSettingsModal(
@@ -1686,16 +1848,7 @@ class SettingsView(discord.ui.View):
             )
         )
 
-    @discord.ui.button(
-        label="Log",
-        emoji="📋",
-        style=discord.ButtonStyle.secondary
-    )
-    async def log(
-        self,
-        interaction,
-        button
-    ):
+    async def log(self, interaction):
 
         await interaction.response.send_modal(
             LogModal(
@@ -1703,16 +1856,7 @@ class SettingsView(discord.ui.View):
             )
         )
 
-    @discord.ui.button(
-        label="Hoş Geldin",
-        emoji="👋",
-        style=discord.ButtonStyle.secondary
-    )
-    async def welcome(
-        self,
-        interaction,
-        button
-    ):
+    async def welcome(self, interaction):
 
         await interaction.response.send_modal(
             WelcomeModal(
@@ -1720,16 +1864,7 @@ class SettingsView(discord.ui.View):
             )
         )
 
-    @discord.ui.button(
-        label="Otorol",
-        emoji="🎭",
-        style=discord.ButtonStyle.secondary
-    )
-    async def autorole(
-        self,
-        interaction,
-        button
-    ):
+    async def autorole(self, interaction):
 
         await interaction.response.send_modal(
             AutoroleModal(
@@ -1737,16 +1872,7 @@ class SettingsView(discord.ui.View):
             )
         )
 
-    @discord.ui.button(
-        label="Moderasyon",
-        emoji="🛡️",
-        style=discord.ButtonStyle.secondary
-    )
-    async def moderation(
-        self,
-        interaction,
-        button
-    ):
+    async def moderation(self, interaction):
 
         config = get_config(
             interaction.guild.id
@@ -1763,40 +1889,24 @@ class SettingsView(discord.ui.View):
                 interaction.guild,
                 interaction.user.id
             ),
-            view=self
+            view=SettingsView(
+                interaction.user.id
+            )
         )
 
-    @discord.ui.button(
-        label="Yenile",
-        emoji="🔄",
-        style=discord.ButtonStyle.success,
-        row=1
-    )
-    async def refresh(
-        self,
-        interaction,
-        button
-    ):
+    async def refresh(self, interaction):
 
         await interaction.response.edit_message(
             embed=settings_embed(
                 interaction.guild,
                 interaction.user.id
             ),
-            view=self
+            view=SettingsView(
+                interaction.user.id
+            )
         )
 
-    @discord.ui.button(
-        label="Sıfırla",
-        emoji="🗑️",
-        style=discord.ButtonStyle.danger,
-        row=1
-    )
-    async def reset(
-        self,
-        interaction,
-        button
-    ):
+    async def reset(self, interaction):
 
         configs[str(interaction.guild.id)] = (
             DEFAULT_CONFIG.copy()
@@ -1809,7 +1919,9 @@ class SettingsView(discord.ui.View):
                 interaction.guild,
                 interaction.user.id
             ),
-            view=self
+            view=SettingsView(
+                interaction.user.id
+            )
         )
 
 
@@ -1849,10 +1961,11 @@ async def dil(
 
     if dil.value == current_language:
 
-        if dil.value == "tr":
-            message = TEXTS["tr"]["already_tr"]
-        else:
-            message = TEXTS["en"]["already_en"]
+        message = (
+            TEXTS["tr"]["already_tr"]
+            if dil.value == "tr"
+            else TEXTS["en"]["already_en"]
+        )
 
         await interaction.response.send_message(
             f"<:Dynexhayir:1555265003727102134> {message}",
@@ -1866,10 +1979,11 @@ async def dil(
         dil.value
     )
 
-    if dil.value == "tr":
-        message = TEXTS["tr"]["language_changed_tr"]
-    else:
-        message = TEXTS["en"]["language_changed_en"]
+    message = (
+        TEXTS["tr"]["language_changed_tr"]
+        if dil.value == "tr"
+        else TEXTS["en"]["language_changed_en"]
+    )
 
     await interaction.response.send_message(
         f"🌐 {message}",
@@ -1895,7 +2009,9 @@ async def ayarlar(interaction):
             interaction.guild,
             interaction.user.id
         ),
-        view=SettingsView(),
+        view=SettingsView(
+            interaction.user.id
+        ),
         ephemeral=True
     )
 
@@ -1948,10 +2064,111 @@ async def ping(interaction):
         bot.latency * 1000
     )
 
-    await interaction.response.send_message(
-        f"🏓 **{t(interaction.user.id, 'ping_title')}**\n"
-        f"**{latency}ms**"
+    embed = discord.Embed(
+        title=t(
+            interaction.user.id,
+            "ping_title"
+        ),
+        description=t(
+            interaction.user.id,
+            "ping_description"
+        ),
+        color=discord.Color.from_rgb(
+            0,
+            0,
+            0
+        )
     )
+
+    embed.add_field(
+        name="",
+        value=f"`{latency}ms`",
+        inline=False
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# SES BİLDİRİMİ BUTONU
+# =========================================================
+
+class VoiceNotificationView(discord.ui.View):
+
+    def __init__(
+        self,
+        user_id,
+        enabled=None
+    ):
+
+        super().__init__(
+            timeout=None
+        )
+
+        self.user_id = user_id
+
+        if enabled is None:
+            enabled = get_voice_notifications(
+                user_id
+            )
+
+        language = get_language(
+            user_id
+        )
+
+        if enabled:
+
+            label = TEXTS[language][
+                "voice_disable"
+            ]
+
+            emoji = "🔕"
+
+        else:
+
+            label = TEXTS[language][
+                "voice_enable"
+            ]
+
+            emoji = "🔔"
+
+        button = discord.ui.Button(
+            label=label,
+            emoji=emoji,
+            style=(
+                discord.ButtonStyle.danger
+                if enabled
+                else discord.ButtonStyle.success
+            ),
+            custom_id="dynex_voice_notifications"
+        )
+
+        button.callback = self.toggle
+        self.add_item(button)
+
+    async def toggle(self, interaction):
+
+        user_id = interaction.user.id
+
+        current = get_voice_notifications(
+            user_id
+        )
+
+        new_state = not current
+
+        set_voice_notifications(
+            user_id,
+            new_state
+        )
+
+        await interaction.response.edit_message(
+            view=VoiceNotificationView(
+                user_id,
+                new_state
+            )
+        )
 
 
 # =========================================================
@@ -1965,6 +2182,11 @@ async def send_voice_statistics(
     remaining_members,
     language
 ):
+
+    if not get_voice_notifications(
+        member.id
+    ):
+        return False
 
     hours = duration_seconds // 3600
     minutes = (duration_seconds % 3600) // 60
@@ -2043,7 +2265,11 @@ async def send_voice_statistics(
         dm = await member.create_dm()
 
         await dm.send(
-            message
+            message,
+            view=VoiceNotificationView(
+                member.id,
+                True
+            )
         )
 
         return True
@@ -2072,6 +2298,10 @@ async def send_voice_statistics(
 
         return False
 
+
+# =========================================================
+# VOICE STATE
+# =========================================================
 
 @bot.event
 async def on_voice_state_update(
@@ -2210,11 +2440,9 @@ async def on_member_join(member):
             if role:
 
                 try:
-
                     await member.add_roles(
                         role
                     )
-
                 except Exception:
                     pass
 
@@ -2249,11 +2477,9 @@ async def on_member_join(member):
                 )
 
                 try:
-
                     await channel.send(
                         message
                     )
-
                 except Exception:
                     pass
 
@@ -2275,11 +2501,11 @@ async def on_ready():
         if not views_added:
 
             bot.add_view(
-                TicketPanelView()
+                TicketPanelView("tr")
             )
 
             bot.add_view(
-                TicketCloseView()
+                TicketCloseView("tr")
             )
 
             views_added = True
