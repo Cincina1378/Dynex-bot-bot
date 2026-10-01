@@ -3,19 +3,14 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import json
-import asyncio
-import time
-import random
-import yt_dlp
 
 # =========================
-# AYARLAR
+# BOT
 # =========================
 
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
-intents.voice_states = True
 
 bot = commands.Bot(
     command_prefix="!",
@@ -27,10 +22,9 @@ CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "ticket_enabled": False,
     "ticket_category": None,
-    "music_enabled": True,
-    "music_max_volume": 100,
-    "music_default_volume": 50,
-    "music_auto_leave": True,
+    "ticket_channel": None,
+    "ticket_title": "Destek Talebi",
+    "ticket_description": "Destek almak için aşağıdaki butona tıklayın.",
     "log_enabled": False,
     "log_channel": None,
     "welcome_enabled": False,
@@ -42,6 +36,10 @@ DEFAULT_CONFIG = {
 }
 
 
+# =========================
+# CONFIG
+# =========================
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -49,612 +47,576 @@ def load_config():
 
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            return json.load(f)
     except:
-        data = {}
-
-    return data
-
-
-def save_config(data):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+        return {}
 
 
 configs = load_config()
 
 
-def get_config(guild_id):
-    gid = str(guild_id)
+def save_config():
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(configs, f, indent=4, ensure_ascii=False)
 
-    if gid not in configs:
-        configs[gid] = DEFAULT_CONFIG.copy()
-        save_config(configs)
+
+def get_config(guild_id):
+    guild_id = str(guild_id)
+
+    if guild_id not in configs:
+        configs[guild_id] = DEFAULT_CONFIG.copy()
+        save_config()
 
     for key, value in DEFAULT_CONFIG.items():
-        if key not in configs[gid]:
-            configs[gid][key] = value
+        if key not in configs[guild_id]:
+            configs[guild_id][key] = value
 
-    return configs[gid]
+    return configs[guild_id]
 
 
 # =========================
-# MÜZİK
+# AYARLAR EMBED
 # =========================
 
-music_states = {}
-
-
-def get_music_state(guild_id):
-    if guild_id not in music_states:
-        music_states[guild_id] = {
-            "queue": [],
-            "current": None,
-            "voice": None,
-            "owner_id": None,
-            "paused": False,
-            "loop": False,
-            "started_at": None,
-            "paused_at": None,
-            "paused_total": 0,
-            "panel_message": None,
-            "panel_view": None,
-            "generation": 0
-        }
-
-    return music_states[guild_id]
-
-
-YTDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "noplaylist": True,
-    "quiet": True,
-    "no_warnings": False,
-    "extract_flat": False,
-    "js_runtimes": {
-        "node": {}
-    },
-    "remote_components": {
-        "ejs": ["github"]
-    }
-}
-
-
-async def extract_audio(url):
-    loop = asyncio.get_running_loop()
-
-    def extract():
-        with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-
-            if not info:
-                return None
-
-            if "entries" in info:
-                entries = info.get("entries")
-
-                if not entries:
-                    return None
-
-                info = entries[0]
-
-            return {
-                "title": info.get("title", "Bilinmeyen Şarkı"),
-                "url": info.get("url"),
-                "webpage_url": info.get("webpage_url", url),
-                "duration": info.get("duration") or 0,
-                "thumbnail": info.get("thumbnail"),
-                "original_url": url
-            }
-
-    try:
-        return await loop.run_in_executor(None, extract)
-    except Exception as e:
-        print("YT-DLP HATASI:", repr(e))
-        return None
-
-
-def format_time(seconds):
-    seconds = int(seconds or 0)
-
-    minutes = seconds // 60
-    seconds = seconds % 60
-
-    return f"{minutes}:{seconds:02d}"
-
-
-def get_elapsed(state):
-    if not state["current"]:
-        return 0
-
-    if state["started_at"] is None:
-        return 0
-
-    if state["paused"]:
-        if state["paused_at"] is None:
-            return 0
-
-        elapsed = state["paused_at"] - state["started_at"]
-    else:
-        elapsed = time.time() - state["started_at"]
-
-    elapsed -= state["paused_total"]
-
-    return max(0, elapsed)
-
-
-def progress_bar(elapsed, duration):
-    if not duration or duration <= 0:
-        return "━━━━━━━━━━━━━━━━━━"
-
-    total = 18
-
-    position = int((elapsed / duration) * total)
-
-    if position < 0:
-        position = 0
-
-    if position >= total:
-        position = total - 1
-
-    return (
-        "━" * position
-        + "🔵"
-        + "━" * (total - position - 1)
-    )
-
-
-def music_embed(guild_id):
-    state = get_music_state(guild_id)
+def settings_embed(guild):
+    config = get_config(guild.id)
 
     embed = discord.Embed(
-        title="🎵 Dynex Müzik",
+        title="<:Ayarlar:1555263064721334282> Dynex Ayarları",
+        description=(
+            "Aşağıdaki butonları kullanarak sunucunun "
+            "Dynex sistemlerini yönetebilirsin."
+        ),
         color=discord.Color.blue()
     )
 
-    current = state["current"]
-
-    if not current:
-        embed.description = "Şu anda müzik çalmıyor."
-        return embed
-
-    elapsed = get_elapsed(state)
-    duration = current["duration"]
-
-    if duration:
-        if elapsed > duration:
-            elapsed = duration
-
-        bar = progress_bar(elapsed, duration)
-
-        embed.description = (
-            f"**{current['title']}**\n\n"
-            f"`{format_time(elapsed)} {bar} {format_time(duration)}`"
-        )
-    else:
-        embed.description = f"**{current['title']}**"
-
-    if current.get("thumbnail"):
-        embed.set_thumbnail(url=current["thumbnail"])
-
-    if state["paused"]:
-        status = "⏸️ Duraklatıldı"
-    else:
-        status = "▶️ Çalıyor"
-
     embed.add_field(
-        name="Durum",
-        value=status,
+        name="🎫 Ticket",
+        value=(
+            f"Durum: **{'Açık' if config['ticket_enabled'] else 'Kapalı'}**\n"
+            f"Kategori: "
+            f"{f'<#{config['ticket_category']}>' if config['ticket_category'] else 'Ayarlanmadı'}"
+        ),
         inline=True
     )
 
     embed.add_field(
-        name="Sıradaki",
-        value=str(len(state["queue"])),
+        name="📋 Log",
+        value=(
+            f"Durum: **{'Açık' if config['log_enabled'] else 'Kapalı'}**\n"
+            f"Kanal: "
+            f"{f'<#{config['log_channel']}>' if config['log_channel'] else 'Ayarlanmadı'}"
+        ),
         inline=True
     )
 
     embed.add_field(
-        name="Döngü",
-        value="🔁 Açık" if state["loop"] else "Kapalı",
+        name="👋 Hoş Geldin",
+        value=(
+            f"Durum: **{'Açık' if config['welcome_enabled'] else 'Kapalı'}**\n"
+            f"Kanal: "
+            f"{f'<#{config['welcome_channel']}>' if config['welcome_channel'] else 'Ayarlanmadı'}"
+        ),
         inline=True
     )
 
-    if state["owner_id"]:
-        embed.set_footer(
-            text=f"Panel sahibi: {guild_id}"
-        )
+    embed.add_field(
+        name="🎭 Otorol",
+        value=(
+            f"Durum: **{'Açık' if config['autorole_enabled'] else 'Kapalı'}**\n"
+            f"Rol: "
+            f"{f'<@&{config['autorole']}>' if config['autorole'] else 'Ayarlanmadı'}"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="🛡️ Moderasyon",
+        value=(
+            f"Durum: **"
+            f"{'Açık' if config['moderation_enabled'] else 'Kapalı'}**"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="⚙️ Yönetim",
+        value="Butonlardan istediğin sistemi doğrudan ayarlayabilirsin.",
+        inline=True
+    )
 
     return embed
 
 
-async def update_music_panel(guild_id):
-    state = get_music_state(guild_id)
-
-    message = state.get("panel_message")
-    view = state.get("panel_view")
-
-    if not message:
-        return
-
-    try:
-        await message.edit(
-            embed=music_embed(guild_id),
-            view=view
-        )
-    except:
-        pass
-
-
-async def play_current(guild_id):
-    state = get_music_state(guild_id)
-    config = get_config(guild_id)
-
-    voice = state["voice"]
-    current = state["current"]
-
-    if not voice or not current:
-        return
-
-    try:
-        if voice.is_playing():
-            voice.stop()
-    except:
-        pass
-
-    ffmpeg_options = {
-        "before_options": (
-            "-reconnect 1 "
-            "-reconnect_streamed 1 "
-            "-reconnect_delay_max 5"
-        ),
-        "options": "-vn"
-    }
-
-    source = discord.FFmpegPCMAudio(
-        current["url"],
-        **ffmpeg_options
-    )
-
-    volume = config.get("music_default_volume", 50)
-    volume = max(0, min(100, volume))
-
-    source = discord.PCMVolumeTransformer(
-        source,
-        volume=volume / 100
-    )
-
-    state["paused"] = False
-    state["paused_at"] = None
-    state["paused_total"] = 0
-    state["started_at"] = time.time()
-
-    generation = state["generation"]
-
-    def after(error):
-        asyncio.run_coroutine_threadsafe(
-            song_finished(guild_id, generation, error),
-            bot.loop
-        )
-
-    try:
-        voice.play(source, after=after)
-    except Exception as e:
-        print("PLAY HATASI:", repr(e))
-
-    await update_music_panel(guild_id)
-
-
-async def song_finished(guild_id, generation, error=None):
-    state = get_music_state(guild_id)
-
-    if generation != state["generation"]:
-        return
-
-    if error:
-        print("MÜZİK HATASI:", repr(error))
-
-    if state["loop"] and state["current"]:
-        state["generation"] += 1
-        await play_current(guild_id)
-        return
-
-    if state["queue"]:
-        state["current"] = state["queue"].pop(0)
-        state["generation"] += 1
-        await play_current(guild_id)
-        return
-
-    state["current"] = None
-    state["started_at"] = None
-    state["paused"] = False
-
-    await update_music_panel(guild_id)
-
-    if state["voice"]:
-        config = get_config(guild_id)
-
-        if config.get("music_auto_leave", True):
-            try:
-                await state["voice"].disconnect()
-            except:
-                pass
-
-            state["voice"] = None
-
-
 # =========================
-# MÜZİK PANELİ
+# TICKET MODAL
 # =========================
 
-class MusicPanel(discord.ui.View):
+class TicketModal(discord.ui.Modal, title="Ticket Paneli Oluştur"):
 
-    def __init__(self, guild_id):
-        super().__init__(timeout=None)
-        self.guild_id = guild_id
-
-    async def check_owner(self, interaction):
-        state = get_music_state(self.guild_id)
-
-        if state["owner_id"] != interaction.user.id:
-            embed = discord.Embed(
-                title="Erişim Reddedildi",
-                description="Bu müzik panelini sadece paneli açan kişi kontrol edebilir.",
-                color=discord.Color.red()
-            )
-
-            await interaction.response.send_message(
-                embed=embed,
-                ephemeral=True
-            )
-
-            return False
-
-        return True
-
-    @discord.ui.button(
-        label="Önceki",
-        emoji="⏮️",
-        style=discord.ButtonStyle.secondary
+    panel_title = discord.ui.TextInput(
+        label="Panel başlığı",
+        placeholder="Destek Talebi",
+        default="Destek Talebi",
+        max_length=100
     )
-    async def previous(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not await self.check_owner(interaction):
-            return
 
-        state = get_music_state(self.guild_id)
+    panel_description = discord.ui.TextInput(
+        label="Panel açıklaması",
+        placeholder="Destek almak için aşağıdaki butona tıklayın.",
+        default="Destek almak için aşağıdaki butona tıklayın.",
+        style=discord.TextStyle.paragraph,
+        max_length=1000
+    )
 
-        if not state["queue"]:
+    category_id = discord.ui.TextInput(
+        label="Ticket kategori ID",
+        placeholder="Kategori ID'sini gir",
+        required=True,
+        max_length=30
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        try:
+            category_id = int(self.category_id.value)
+        except:
             await interaction.response.send_message(
-                "Sırada başka şarkı yok.",
+                "Geçerli bir kategori ID'si gir.",
                 ephemeral=True
             )
             return
 
-        if state["current"]:
-            state["queue"].insert(0, state["current"])
+        category = interaction.guild.get_channel(category_id)
 
-        state["current"] = state["queue"].pop()
-
-        state["generation"] += 1
-
-        await interaction.response.defer()
-
-        await play_current(self.guild_id)
-
-
-    @discord.ui.button(
-        label="Oynat / Duraklat",
-        emoji="▶️",
-        style=discord.ButtonStyle.primary
-    )
-    async def pause_play(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not await self.check_owner(interaction):
-            return
-
-        state = get_music_state(self.guild_id)
-        voice = state["voice"]
-
-        if not voice:
+        if not isinstance(category, discord.CategoryChannel):
             await interaction.response.send_message(
-                "Ses kanalında değilim.",
+                "Bu ID bir kategoriye ait değil.",
                 ephemeral=True
             )
             return
 
-        if voice.is_playing():
-            voice.pause()
+        config = get_config(interaction.guild.id)
 
-            state["paused"] = True
-            state["paused_at"] = time.time()
+        config["ticket_enabled"] = True
+        config["ticket_category"] = category_id
+        config["ticket_title"] = self.panel_title.value
+        config["ticket_description"] = self.panel_description.value
 
-        elif voice.is_paused():
-            voice.resume()
-
-            if state["paused_at"]:
-                state["paused_total"] += (
-                    time.time() - state["paused_at"]
-                )
-
-            state["paused_at"] = None
-            state["paused"] = False
-
-        await interaction.response.defer()
-        await update_music_panel(self.guild_id)
-
-
-    @discord.ui.button(
-        label="Sonraki",
-        emoji="⏭️",
-        style=discord.ButtonStyle.secondary
-    )
-    async def next_song(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not await self.check_owner(interaction):
-            return
-
-        state = get_music_state(self.guild_id)
-
-        if not state["queue"]:
-            await interaction.response.send_message(
-                "Sırada başka şarkı yok.",
-                ephemeral=True
-            )
-            return
-
-        state["current"] = state["queue"].pop(0)
-        state["generation"] += 1
-
-        await interaction.response.defer()
-
-        await play_current(self.guild_id)
-
-
-    @discord.ui.button(
-        label="Karıştır",
-        emoji="🔀",
-        style=discord.ButtonStyle.secondary
-    )
-    async def shuffle(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not await self.check_owner(interaction):
-            return
-
-        state = get_music_state(self.guild_id)
-
-        if len(state["queue"]) < 2:
-            await interaction.response.send_message(
-                "Karıştırmak için en az 2 şarkı gerekli.",
-                ephemeral=True
-            )
-            return
-
-        random.shuffle(state["queue"])
-
-        await interaction.response.send_message(
-            "Müzik sırası karıştırıldı.",
-            ephemeral=True
-        )
-
-        await update_music_panel(self.guild_id)
-
-
-    @discord.ui.button(
-        label="Döngü",
-        emoji="🔁",
-        style=discord.ButtonStyle.secondary
-    )
-    async def loop_song(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not await self.check_owner(interaction):
-            return
-
-        state = get_music_state(self.guild_id)
-
-        state["loop"] = not state["loop"]
-
-        await interaction.response.defer()
-        await update_music_panel(self.guild_id)
-
-
-    @discord.ui.button(
-        label="Sıra",
-        emoji="📜",
-        style=discord.ButtonStyle.secondary
-    )
-    async def queue_list(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not await self.check_owner(interaction):
-            return
-
-        state = get_music_state(self.guild_id)
-
-        if not state["queue"]:
-            await interaction.response.send_message(
-                "Müzik sırası boş.",
-                ephemeral=True
-            )
-            return
-
-        text = []
-
-        for index, song in enumerate(state["queue"][:20], 1):
-            text.append(
-                f"`{index}.` {song['title']}"
-            )
+        save_config()
 
         embed = discord.Embed(
-            title="📜 Müzik Sırası",
-            description="\n".join(text),
+            title=self.panel_title.value,
+            description=self.panel_description.value,
             color=discord.Color.blue()
         )
 
-        await interaction.response.send_message(
+        view = TicketPanelView()
+
+        await interaction.channel.send(
             embed=embed,
+            view=view
+        )
+
+        await interaction.response.send_message(
+            "<:Dynexevet:1555263066235605023> Ticket paneli oluşturuldu.",
+            ephemeral=True
+        )
+
+
+# =========================
+# LOG MODAL
+# =========================
+
+class LogModal(discord.ui.Modal, title="Log Ayarları"):
+
+    channel_id = discord.ui.TextInput(
+        label="Log kanal ID",
+        placeholder="Kanal ID'sini gir",
+        required=True,
+        max_length=30
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        try:
+            channel_id = int(self.channel_id.value)
+        except:
+            await interaction.response.send_message(
+                "Geçerli bir kanal ID'si gir.",
+                ephemeral=True
+            )
+            return
+
+        channel = interaction.guild.get_channel(channel_id)
+
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(
+                "Bu ID bir yazı kanalına ait değil.",
+                ephemeral=True
+            )
+            return
+
+        config = get_config(interaction.guild.id)
+
+        config["log_enabled"] = True
+        config["log_channel"] = channel_id
+
+        save_config()
+
+        await interaction.response.send_message(
+            "<:Dynexevet:1555263066235605023> Log sistemi açıldı.",
+            ephemeral=True
+        )
+
+
+# =========================
+# WELCOME MODAL
+# =========================
+
+class WelcomeModal(discord.ui.Modal, title="Hoş Geldin Ayarları"):
+
+    channel_id = discord.ui.TextInput(
+        label="Hoş geldin kanal ID",
+        placeholder="Kanal ID'sini gir",
+        required=True,
+        max_length=30
+    )
+
+    message = discord.ui.TextInput(
+        label="Hoş geldin mesajı",
+        placeholder="Hoş geldin {user}!",
+        default="Hoş geldin {user}!",
+        style=discord.TextStyle.paragraph,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        try:
+            channel_id = int(self.channel_id.value)
+        except:
+            await interaction.response.send_message(
+                "Geçerli bir kanal ID'si gir.",
+                ephemeral=True
+            )
+            return
+
+        channel = interaction.guild.get_channel(channel_id)
+
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(
+                "Bu ID bir yazı kanalına ait değil.",
+                ephemeral=True
+            )
+            return
+
+        config = get_config(interaction.guild.id)
+
+        config["welcome_enabled"] = True
+        config["welcome_channel"] = channel_id
+        config["welcome_message"] = self.message.value
+
+        save_config()
+
+        await interaction.response.send_message(
+            "<:Dynexevet:1555263066235605023> Hoş geldin sistemi ayarlandı.",
+            ephemeral=True
+        )
+
+
+# =========================
+# OTOROL MODAL
+# =========================
+
+class AutoroleModal(discord.ui.Modal, title="Otorol Ayarları"):
+
+    role_id = discord.ui.TextInput(
+        label="Otorol rol ID",
+        placeholder="Rol ID'sini gir",
+        required=True,
+        max_length=30
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        try:
+            role_id = int(self.role_id.value)
+        except:
+            await interaction.response.send_message(
+                "Geçerli bir rol ID'si gir.",
+                ephemeral=True
+            )
+            return
+
+        role = interaction.guild.get_role(role_id)
+
+        if not role:
+            await interaction.response.send_message(
+                "Bu ID'ye ait rol bulunamadı.",
+                ephemeral=True
+            )
+            return
+
+        config = get_config(interaction.guild.id)
+
+        config["autorole_enabled"] = True
+        config["autorole"] = role_id
+
+        save_config()
+
+        await interaction.response.send_message(
+            "<:Dynexevet:1555263066235605023> Otorol ayarlandı.",
+            ephemeral=True
+        )
+
+
+# =========================
+# TICKET PANELİ
+# =========================
+
+class TicketPanelView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Destek Talebi Oluştur",
+        emoji="🎫",
+        style=discord.ButtonStyle.primary,
+        custom_id="dynex_ticket_create"
+    )
+    async def create_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        config = get_config(interaction.guild.id)
+
+        category_id = config.get("ticket_category")
+
+        if not category_id:
+            await interaction.response.send_message(
+                "Ticket kategorisi ayarlanmamış.",
+                ephemeral=True
+            )
+            return
+
+        category = interaction.guild.get_channel(category_id)
+
+        if not isinstance(category, discord.CategoryChannel):
+            await interaction.response.send_message(
+                "Ticket kategorisi bulunamadı.",
+                ephemeral=True
+            )
+            return
+
+        channel_name = f"ticket-{interaction.user.name}".lower()
+        channel_name = channel_name.replace(" ", "-")
+
+        existing = discord.utils.get(
+            category.channels,
+            name=channel_name
+        )
+
+        if existing:
+            await interaction.response.send_message(
+                f"Zaten açık bir ticketın var: {existing.mention}",
+                ephemeral=True
+            )
+            return
+
+        overwrites = {
+            interaction.guild.default_role:
+                discord.PermissionOverwrite(
+                    view_channel=False
+                ),
+            interaction.user:
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                ),
+            interaction.guild.me:
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True
+                )
+        }
+
+        channel = await interaction.guild.create_text_channel(
+            channel_name,
+            category=category,
+            overwrites=overwrites
+        )
+
+        embed = discord.Embed(
+            title="🎫 Ticket",
+            description=(
+                f"{interaction.user.mention}, destek talebin oluşturuldu.\n\n"
+                "Yetkililer kısa süre içinde ilgilenecektir."
+            ),
+            color=discord.Color.blue()
+        )
+
+        await channel.send(
+            content=interaction.user.mention,
+            embed=embed,
+            view=TicketCloseView()
+        )
+
+        await interaction.response.send_message(
+            f"<:Dynexevet:1555263066235605023> Ticket oluşturuldu: {channel.mention}",
+            ephemeral=True
+        )
+
+
+# =========================
+# TICKET KAPAT
+# =========================
+
+class TicketCloseView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Ticket Kapat",
+        emoji="🔒",
+        style=discord.ButtonStyle.danger,
+        custom_id="dynex_ticket_close"
+    )
+    async def close_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        await interaction.response.send_message(
+            "Ticket 5 saniye içinde kapatılıyor.",
+            ephemeral=True
+        )
+
+        await discord.utils.sleep_until(
+            discord.utils.utcnow()
+        )
+
+        await interaction.channel.delete(
+            reason=f"Ticket kapatıldı: {interaction.user}"
+        )
+
+
+# =========================
+# AYARLAR PANELİ
+# =========================
+
+class SettingsView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(
+        label="Ticket",
+        emoji="🎫",
+        style=discord.ButtonStyle.primary
+    )
+    async def ticket(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        await interaction.response.send_modal(
+            TicketModal()
+        )
+
+
+    @discord.ui.button(
+        label="Log",
+        emoji="📋",
+        style=discord.ButtonStyle.secondary
+    )
+    async def log(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        await interaction.response.send_modal(
+            LogModal()
+        )
+
+
+    @discord.ui.button(
+        label="Hoş Geldin",
+        emoji="👋",
+        style=discord.ButtonStyle.secondary
+    )
+    async def welcome(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        await interaction.response.send_modal(
+            WelcomeModal()
+        )
+
+
+    @discord.ui.button(
+        label="Otorol",
+        emoji="🎭",
+        style=discord.ButtonStyle.secondary
+    )
+    async def autorole(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        await interaction.response.send_modal(
+            AutoroleModal()
+        )
+
+
+    @discord.ui.button(
+        label="Moderasyon",
+        emoji="🛡️",
+        style=discord.ButtonStyle.secondary
+    )
+    async def moderation(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        config = get_config(interaction.guild.id)
+
+        config["moderation_enabled"] = not config["moderation_enabled"]
+
+        save_config()
+
+        durum = (
+            "açıldı"
+            if config["moderation_enabled"]
+            else "kapatıldı"
+        )
+
+        await interaction.response.edit_message(
+            embed=settings_embed(interaction.guild),
+            view=self
+        )
+
+        await interaction.followup.send(
+            f"<:Dynexevet:1555263066235605023> Moderasyon sistemi {durum}.",
             ephemeral=True
         )
 
 
     @discord.ui.button(
-        label="Durdur",
-        emoji="⏹️",
-        style=discord.ButtonStyle.danger
-    )
-    async def stop(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        if not await self.check_owner(interaction):
-            return
-
-        state = get_music_state(self.guild_id)
-
-        state["generation"] += 1
-        state["queue"].clear()
-        state["current"] = None
-        state["started_at"] = None
-        state["paused"] = False
-
-        if state["voice"]:
-            try:
-                if state["voice"].is_playing():
-                    state["voice"].stop()
-            except:
-                pass
-
-            try:
-                await state["voice"].disconnect()
-            except:
-                pass
-
-        state["voice"] = None
-
-        await interaction.response.defer()
-        await update_music_panel(self.guild_id)
-
-
-    @discord.ui.button(
-        label="Yenile",
+        label="Ayarları Yenile",
         emoji="🔄",
         style=discord.ButtonStyle.success
     )
@@ -663,278 +625,16 @@ class MusicPanel(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
-        if not await self.check_owner(interaction):
-            return
 
-        await interaction.response.defer()
-        await update_music_panel(self.guild_id)
-
-
-# =========================
-# /PLAY
-# =========================
-
-@bot.tree.command(
-    name="play",
-    description="Bir bağlantıdaki müziği oynatır."
-)
-@app_commands.describe(
-    link="YouTube veya desteklenen müzik bağlantısı"
-)
-async def play(
-    interaction: discord.Interaction,
-    link: str
-):
-    config = get_config(interaction.guild.id)
-
-    if not config.get("music_enabled", True):
-        embed = discord.Embed(
-            title="Müzik Kapalı",
-            description="Bu sunucuda müzik sistemi kapalı.",
-            color=discord.Color.red()
-        )
-
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
-        )
-        return
-
-    if not interaction.user.voice:
-        embed = discord.Embed(
-            title="Ses Kanalı Gerekli",
-            description="Önce bir ses kanalına gir.",
-            color=discord.Color.red()
-        )
-
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
-        )
-        return
-
-    if not link.startswith(("http://", "https://")):
-        embed = discord.Embed(
-            title="Geçersiz Bağlantı",
-            description="Geçerli bir bağlantı gönder.",
-            color=discord.Color.red()
-        )
-
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
-        )
-        return
-
-    await interaction.response.defer()
-
-    song = await extract_audio(link)
-
-    if not song or not song.get("url"):
-        embed = discord.Embed(
-            title="Müzik Bulunamadı",
-            description=(
-                "Bağlantıdan müzik alınamadı.\n"
-                "YouTube bağlantısının geçerli olduğundan emin ol."
-            ),
-            color=discord.Color.red()
-        )
-
-        await interaction.followup.send(
-            embed=embed,
-            ephemeral=True
-        )
-        return
-
-    state = get_music_state(interaction.guild.id)
-
-    channel = interaction.user.voice.channel
-
-    try:
-        if state["voice"] and state["voice"].is_connected():
-            if state["voice"].channel != channel:
-                await state["voice"].move_to(channel)
-        else:
-            state["voice"] = await channel.connect()
-    except Exception as e:
-        print("VOICE HATASI:", repr(e))
-
-        embed = discord.Embed(
-            title="Ses Kanalına Katılamadım",
-            description="Bot ses kanalına bağlanamadı.",
-            color=discord.Color.red()
-        )
-
-        await interaction.followup.send(
-            embed=embed,
-            ephemeral=True
-        )
-        return
-
-    state["owner_id"] = interaction.user.id
-
-    if state["current"]:
-        state["queue"].append(song)
-
-        embed = music_embed(interaction.guild.id)
-
-        if state["panel_message"]:
-            await state["panel_message"].edit(
-                embed=embed,
-                view=state["panel_view"]
-            )
-
-        await interaction.followup.send(
-            f"**{song['title']}** sıraya eklendi.",
-            ephemeral=True
-        )
-
-        return
-
-    state["current"] = song
-    state["generation"] += 1
-
-    view = MusicPanel(interaction.guild.id)
-    state["panel_view"] = view
-
-    await play_current(interaction.guild.id)
-
-    message = await interaction.followup.send(
-        embed=music_embed(interaction.guild.id),
-        view=view,
-        wait=True
-    )
-
-    state["panel_message"] = message
-
-
-# =========================
-# /MÜZİK
-# =========================
-
-@bot.tree.command(
-    name="müzik",
-    description="Müzik panelini açar."
-)
-async def muzik(interaction: discord.Interaction):
-
-    state = get_music_state(interaction.guild.id)
-
-    if state["owner_id"] is None:
-        state["owner_id"] = interaction.user.id
-
-    view = MusicPanel(interaction.guild.id)
-
-    state["panel_view"] = view
-
-    message = await interaction.response.send_message(
-        embed=music_embed(interaction.guild.id),
-        view=view
-    )
-
-    try:
-        state["panel_message"] = await interaction.original_response()
-    except:
-        pass
-
-
-# =========================
-# AYARLAR
-# =========================
-
-class SettingsView(discord.ui.View):
-
-    def __init__(self, guild_id):
-        super().__init__(timeout=180)
-        self.guild_id = guild_id
-
-
-    @discord.ui.button(
-        label="Müzik",
-        emoji="🎵",
-        style=discord.ButtonStyle.primary
-    )
-    async def music_settings(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        config = get_config(self.guild_id)
-
-        embed = discord.Embed(
-            title="<:Ayarlar:1555263064721334282> Müzik Ayarları",
-            description=(
-                f"Müzik: {'Açık' if config['music_enabled'] else 'Kapalı'}\n"
-                f"Varsayılan ses: %{config['music_default_volume']}\n"
-                f"Maksimum ses: %{config['music_max_volume']}\n"
-                f"Otomatik ayrılma: "
-                f"{'Açık' if config['music_auto_leave'] else 'Kapalı'}"
-            ),
-            color=discord.Color.blue()
-        )
-
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
-        )
-
-
-    @discord.ui.button(
-        label="Genel",
-        emoji="<:Dynexserver:1555263062112604270>",
-        style=discord.ButtonStyle.secondary
-    )
-    async def general(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        config = get_config(self.guild_id)
-
-        embed = discord.Embed(
-            title="<:Ayarlar:1555263064721334282> Sunucu Ayarları",
-            color=discord.Color.blue()
-        )
-
-        embed.add_field(
-            name="Ticket",
-            value="Açık" if config["ticket_enabled"] else "Kapalı",
-            inline=True
-        )
-
-        embed.add_field(
-            name="Log",
-            value="Açık" if config["log_enabled"] else "Kapalı",
-            inline=True
-        )
-
-        embed.add_field(
-            name="Hoş Geldin",
-            value="Açık" if config["welcome_enabled"] else "Kapalı",
-            inline=True
-        )
-
-        embed.add_field(
-            name="Otorol",
-            value="Açık" if config["autorole_enabled"] else "Kapalı",
-            inline=True
-        )
-
-        embed.add_field(
-            name="Moderasyon",
-            value="Açık" if config["moderation_enabled"] else "Kapalı",
-            inline=True
-        )
-
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
+        await interaction.response.edit_message(
+            embed=settings_embed(interaction.guild),
+            view=self
         )
 
 
     @discord.ui.button(
         label="Sıfırla",
-        emoji="🔄",
+        emoji="🗑️",
         style=discord.ButtonStyle.danger
     )
     async def reset(
@@ -942,40 +642,37 @@ class SettingsView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
-        configs[str(self.guild_id)] = DEFAULT_CONFIG.copy()
-        save_config(configs)
 
-        embed = discord.Embed(
-            title="<:Dynexevet:1555263066235605023> Ayarlar Sıfırlandı",
-            description="Sunucu ayarları varsayılan değerlere döndürüldü.",
-            color=discord.Color.green()
+        configs[str(interaction.guild.id)] = DEFAULT_CONFIG.copy()
+        save_config()
+
+        await interaction.response.edit_message(
+            embed=settings_embed(interaction.guild),
+            view=self
         )
 
-        await interaction.response.send_message(
-            embed=embed,
+        await interaction.followup.send(
+            "<:Dynexevet:1555263066235605023> Tüm ayarlar sıfırlandı.",
             ephemeral=True
         )
 
 
+# =========================
+# /AYARLAR
+# =========================
+
 @bot.tree.command(
     name="ayarlar",
-    description="Dynex sunucu ayarlarını açar."
+    description="Dynex sunucu ayarlarını yönet."
 )
-@app_commands.checks.has_permissions(manage_guild=True)
-async def ayarlar(interaction: discord.Interaction):
-
-    embed = discord.Embed(
-        title="<:Ayarlar:1555263064721334282> Dynex Ayarları",
-        description=(
-            "Sunucunun Dynex ayarlarını bu panel üzerinden "
-            "yönetebilirsin."
-        ),
-        color=discord.Color.blue()
-    )
+@app_commands.checks.has_permissions(administrator=True)
+async def ayarlar(
+    interaction: discord.Interaction
+):
 
     await interaction.response.send_message(
-        embed=embed,
-        view=SettingsView(interaction.guild.id),
+        embed=settings_embed(interaction.guild),
+        view=SettingsView(),
         ephemeral=True
     )
 
@@ -985,13 +682,18 @@ async def ayarlar_error(
     interaction: discord.Interaction,
     error
 ):
+
     if isinstance(
         error,
         app_commands.errors.MissingPermissions
     ):
+
         embed = discord.Embed(
             title="<:Dynexhayir:1555265003727102134> Yetkin Yok",
-            description="Bu komutu kullanmak için Sunucuyu Yönet yetkisi gerekiyor.",
+            description=(
+                "Bu paneli kullanmak için **Yönetici** "
+                "yetkisine sahip olmalısın."
+            ),
             color=discord.Color.red()
         )
 
@@ -1008,41 +710,16 @@ async def ayarlar_error(
 
 
 # =========================
-# AYARLAR SIFIRLA
-# =========================
-
-@bot.tree.command(
-    name="ayarlar-sifirla",
-    description="Sunucu ayarlarını sıfırlar."
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def ayarlar_sifirla(
-    interaction: discord.Interaction
-):
-    configs[str(interaction.guild.id)] = DEFAULT_CONFIG.copy()
-    save_config(configs)
-
-    embed = discord.Embed(
-        title="<:Dynexevet:1555263066235605023> Sıfırlandı",
-        description="Tüm Dynex ayarları sıfırlandı.",
-        color=discord.Color.green()
-    )
-
-    await interaction.response.send_message(
-        embed=embed,
-        ephemeral=True
-    )
-
-
-# =========================
-# PING
+# /PING
 # =========================
 
 @bot.tree.command(
     name="ping",
-    description="Bot gecikmesini gösterir."
+    description="Dynex gecikmesini gösterir."
 )
-async def ping(interaction: discord.Interaction):
+async def ping(
+    interaction: discord.Interaction
+):
 
     latency = round(bot.latency * 1000)
 
@@ -1058,7 +735,7 @@ async def ping(interaction: discord.Interaction):
 
 
 # =========================
-# ÜYE GİRİŞ
+# ÜYE GİRİŞİ
 # =========================
 
 @bot.event
@@ -1067,9 +744,11 @@ async def on_member_join(member):
     config = get_config(member.guild.id)
 
     if config.get("autorole_enabled"):
+
         role_id = config.get("autorole")
 
         if role_id:
+
             role = member.guild.get_role(role_id)
 
             if role:
@@ -1079,12 +758,15 @@ async def on_member_join(member):
                     pass
 
     if config.get("welcome_enabled"):
+
         channel_id = config.get("welcome_channel")
 
         if channel_id:
+
             channel = member.guild.get_channel(channel_id)
 
             if channel:
+
                 message = config.get(
                     "welcome_message",
                     "Hoş geldin {user}!"
@@ -1109,25 +791,20 @@ async def on_member_join(member):
 async def on_ready():
 
     try:
+        bot.add_view(TicketPanelView())
+        bot.add_view(TicketCloseView())
+
         synced = await bot.tree.sync()
 
-        print(
-            f"Dynex aktif: {bot.user}"
-        )
-
-        print(
-            f"{len(synced)} slash komutu senkronize edildi."
-        )
+        print(f"Dynex aktif: {bot.user}")
+        print(f"{len(synced)} slash komutu senkronize edildi.")
 
     except Exception as e:
-        print(
-            "SLASH KOMUT HATASI:",
-            repr(e)
-        )
+        print("READY HATASI:", repr(e))
 
 
 # =========================
-# BAŞLAT
+# TOKEN
 # =========================
 
 TOKEN = os.getenv("DISCORD_TOKEN")
