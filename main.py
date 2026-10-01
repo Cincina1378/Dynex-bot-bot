@@ -2449,7 +2449,7 @@ async def ping(interaction):
         status = "Berbat"
 
     embed = discord.Embed(
-        title="İttifak Ordusu Botunun Ping(internet) Durumu",
+        title="Dynex Botunun Ping(internet) Durumu",
         description=(
             f"**Ping:** `{latency}ms`\n"
             f"**Durum:** {status}"
