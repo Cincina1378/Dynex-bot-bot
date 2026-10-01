@@ -4,15 +4,14 @@ from discord import app_commands
 import os
 import json
 import asyncio
+from datetime import datetime, timezone
 
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
+intents.voice_states = True
 
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents
-)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 CONFIG_FILE = "config.json"
 
@@ -33,20 +32,22 @@ DEFAULT_CONFIG = {
     "moderation_enabled": True
 }
 
+configs = {}
+voice_sessions = {}
+
 
 def load_config():
+    global configs
+
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump({}, f, indent=4, ensure_ascii=False)
 
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            configs = json.load(f)
     except:
-        return {}
-
-
-configs = load_config()
+        configs = {}
 
 
 def save_config():
@@ -71,6 +72,9 @@ def get_config(guild_id):
             configs[guild_id][key] = value
 
     return configs[guild_id]
+
+
+load_config()
 
 
 # =========================================================
@@ -150,7 +154,7 @@ def settings_embed(guild):
     embed.add_field(
         name="🎭 Otorol",
         value=(
-            f"Durum: **{'Açık' if config['autorole_enabled'] else 'Kapalı'}**\n"
+            f"Durum: **{'Açık' if config['autorole_enabled'] else 'Kapalı'}\n"
             f"Rol: {autorole}"
         ),
         inline=True
@@ -169,7 +173,7 @@ def settings_embed(guild):
 
 
 # =========================================================
-# TICKET AYARLARI MODALI
+# TICKET AYARLARI
 # =========================================================
 
 class TicketSettingsModal(
@@ -275,10 +279,6 @@ class TicketSettingsModal(
         )
 
 
-# =========================================================
-# TICKET SORUN MODALI
-# =========================================================
-
 class TicketProblemModal(
     discord.ui.Modal,
     title="Ticket Oluştur"
@@ -297,11 +297,13 @@ class TicketProblemModal(
 
         config = get_config(interaction.guild.id)
 
-        category_id = config.get("ticket_category")
-        role_id = config.get("ticket_role")
+        category = interaction.guild.get_channel(
+            config.get("ticket_category")
+        )
 
-        category = interaction.guild.get_channel(category_id)
-        role = interaction.guild.get_role(role_id)
+        role = interaction.guild.get_role(
+            config.get("ticket_role")
+        )
 
         if not isinstance(category, discord.CategoryChannel):
             await interaction.response.send_message(
@@ -378,15 +380,10 @@ class TicketProblemModal(
             topic=f"dynex_ticket_owner:{interaction.user.id}"
         )
 
-        custom_message = config.get(
-            "ticket_message",
-            "Ticketiniz başarıyla oluşturuldu."
-        )
-
         embed = discord.Embed(
             title="🎫 Ticket",
             description=(
-                f"{custom_message}\n\n"
+                f"{config.get('ticket_message')}\n\n"
                 f"**Ticketiniz sorun:**\n"
                 f"{self.problem.value}"
             ),
@@ -414,7 +411,7 @@ class TicketProblemModal(
 
 
 # =========================================================
-# ÜYE EKLE MODALI
+# ÜYE EKLE
 # =========================================================
 
 class AddMemberModal(
@@ -433,29 +430,11 @@ class AddMemberModal(
 
         config = get_config(interaction.guild.id)
 
-        role_id = config.get("ticket_role")
-
-        role = interaction.guild.get_role(role_id)
-
-        if not role:
-            await interaction.response.send_message(
-                "<:Dynexhayir:1555265003727102134> "
-                "Ticket yetkili rolü bulunamadı.",
-                ephemeral=True
-            )
-            return
+        role = interaction.guild.get_role(
+            config.get("ticket_role")
+        )
 
         if not interaction.channel.topic:
-            await interaction.response.send_message(
-                "<:Dynexhayir:1555265003727102134> "
-                "Bu kanal bir ticket değil.",
-                ephemeral=True
-            )
-            return
-
-        if not interaction.channel.topic.startswith(
-            "dynex_ticket_owner:"
-        ):
             await interaction.response.send_message(
                 "<:Dynexhayir:1555265003727102134> "
                 "Bu kanal bir ticket değil.",
@@ -476,7 +455,7 @@ class AddMemberModal(
             return
 
         is_owner = interaction.user.id == owner_id
-        is_authorized = role in interaction.user.roles
+        is_authorized = role and role in interaction.user.roles
 
         if not is_owner and not is_authorized:
             await interaction.response.send_message(
@@ -524,9 +503,7 @@ class AddMemberModal(
                 attach_files=True,
                 embed_links=True
             )
-        except Exception as e:
-            print("ÜYE EKLEME HATASI:", repr(e))
-
+        except:
             await interaction.response.send_message(
                 "<:Dynexhayir:1555265003727102134> "
                 "Kullanıcı ticket'a eklenemedi.",
@@ -536,13 +513,12 @@ class AddMemberModal(
 
         await interaction.response.send_message(
             "<:Dynexevet:1555263066235605023> "
-            f"{member.mention} ticket'a eklendi.",
-            ephemeral=False
+            f"{member.mention} ticket'a eklendi."
         )
 
 
 # =========================================================
-# TICKET PANELİ
+# TICKET PANEL
 # =========================================================
 
 class TicketPanelView(
@@ -568,10 +544,6 @@ class TicketPanelView(
         )
 
 
-# =========================================================
-# TICKET İÇİ BUTONLAR
-# =========================================================
-
 class TicketCloseView(
     discord.ui.View
 ):
@@ -592,6 +564,7 @@ class TicketCloseView(
     ):
 
         config = get_config(interaction.guild.id)
+
         role = interaction.guild.get_role(
             config.get("ticket_role")
         )
@@ -693,7 +666,7 @@ class TicketCloseView(
 
 
 # =========================================================
-# LOG MODALI
+# LOG
 # =========================================================
 
 class LogModal(
@@ -745,7 +718,7 @@ class LogModal(
 
 
 # =========================================================
-# HOŞ GELDİN MODALI
+# HOŞ GELDİN
 # =========================================================
 
 class WelcomeModal(
@@ -806,7 +779,7 @@ class WelcomeModal(
 
 
 # =========================================================
-# OTOROL MODALI
+# OTOROL
 # =========================================================
 
 class AutoroleModal(
@@ -858,7 +831,7 @@ class AutoroleModal(
 
 
 # =========================================================
-# AYARLAR PANELİ
+# AYARLAR
 # =========================================================
 
 class SettingsView(
@@ -873,11 +846,7 @@ class SettingsView(
         emoji="🎫",
         style=discord.ButtonStyle.primary
     )
-    async def ticket(
-        self,
-        interaction,
-        button
-    ):
+    async def ticket(self, interaction, button):
         await interaction.response.send_modal(
             TicketSettingsModal()
         )
@@ -887,11 +856,7 @@ class SettingsView(
         emoji="📋",
         style=discord.ButtonStyle.secondary
     )
-    async def log(
-        self,
-        interaction,
-        button
-    ):
+    async def log(self, interaction, button):
         await interaction.response.send_modal(
             LogModal()
         )
@@ -901,11 +866,7 @@ class SettingsView(
         emoji="👋",
         style=discord.ButtonStyle.secondary
     )
-    async def welcome(
-        self,
-        interaction,
-        button
-    ):
+    async def welcome(self, interaction, button):
         await interaction.response.send_modal(
             WelcomeModal()
         )
@@ -915,11 +876,7 @@ class SettingsView(
         emoji="🎭",
         style=discord.ButtonStyle.secondary
     )
-    async def autorole(
-        self,
-        interaction,
-        button
-    ):
+    async def autorole(self, interaction, button):
         await interaction.response.send_modal(
             AutoroleModal()
         )
@@ -929,11 +886,7 @@ class SettingsView(
         emoji="🛡️",
         style=discord.ButtonStyle.secondary
     )
-    async def moderation(
-        self,
-        interaction,
-        button
-    ):
+    async def moderation(self, interaction, button):
 
         config = get_config(interaction.guild.id)
 
@@ -953,11 +906,7 @@ class SettingsView(
         emoji="🔄",
         style=discord.ButtonStyle.success
     )
-    async def refresh(
-        self,
-        interaction,
-        button
-    ):
+    async def refresh(self, interaction, button):
 
         await interaction.response.edit_message(
             embed=settings_embed(interaction.guild),
@@ -969,25 +918,17 @@ class SettingsView(
         emoji="🗑️",
         style=discord.ButtonStyle.danger
     )
-    async def reset(
-        self,
-        interaction,
-        button
-    ):
+    async def reset(self, interaction, button):
 
-        configs[str(interaction.guild.id)] = DEFAULT_CONFIG.copy()
+        configs[str(interaction.guild.id)] = (
+            DEFAULT_CONFIG.copy()
+        )
 
         save_config()
 
         await interaction.response.edit_message(
             embed=settings_embed(interaction.guild),
             view=self
-        )
-
-        await interaction.followup.send(
-            "<:Dynexevet:1555263066235605023> "
-            "Tüm ayarlar sıfırlandı.",
-            ephemeral=True
         )
 
 
@@ -1012,10 +953,7 @@ async def ayarlar(interaction):
 
 
 @ayarlar.error
-async def ayarlar_error(
-    interaction,
-    error
-):
+async def ayarlar_error(interaction, error):
 
     if isinstance(
         error,
@@ -1067,6 +1005,120 @@ async def ping(interaction):
 
 
 # =========================================================
+# SES İSTATİSTİKLERİ
+# =========================================================
+
+@bot.event
+async def on_voice_state_update(
+    member,
+    before,
+    after
+):
+
+    # Kullanıcı bir ses kanalına yeni girdiyse
+    if before.channel is None and after.channel is not None:
+
+        voice_sessions[
+            (member.guild.id, member.id)
+        ] = {
+            "channel_id": after.channel.id,
+            "started_at": datetime.now(timezone.utc)
+        }
+
+        return
+
+    # Kullanıcı başka bir ses kanalına geçtiyse
+    if (
+        before.channel is not None
+        and after.channel is not None
+        and before.channel.id != after.channel.id
+    ):
+
+        key = (member.guild.id, member.id)
+
+        voice_sessions[key] = {
+            "channel_id": after.channel.id,
+            "started_at": datetime.now(timezone.utc)
+        }
+
+        return
+
+    # Kullanıcı sesten tamamen çıktıysa
+    if before.channel is not None and after.channel is None:
+
+        key = (member.guild.id, member.id)
+
+        session = voice_sessions.pop(key, None)
+
+        if not session:
+            return
+
+        started_at = session["started_at"]
+        ended_at = datetime.now(timezone.utc)
+
+        duration_seconds = int(
+            (ended_at - started_at).total_seconds()
+        )
+
+        if duration_seconds < 0:
+            duration_seconds = 0
+
+        hours = duration_seconds // 3600
+        minutes = (duration_seconds % 3600) // 60
+        seconds = duration_seconds % 60
+
+        if hours > 0:
+            duration_text = (
+                f"{hours} saat "
+                f"{minutes} dakika "
+                f"{seconds} saniye"
+            )
+        elif minutes > 0:
+            duration_text = (
+                f"{minutes} dakika "
+                f"{seconds} saniye"
+            )
+        else:
+            duration_text = (
+                f"{seconds} saniye"
+            )
+
+        # Kullanıcı çıktıktan SONRA kanalda kalan kişi sayısı
+        remaining_members = len(
+            [
+                m for m in before.channel.members
+                if not m.bot
+            ]
+        )
+
+        guild_name = member.guild.name
+
+        message = (
+            f"🔊 **{guild_name} adlı sunucunun ses istatikleri**\n\n"
+            f"**Bugün {guild_name} adlı sunucuda sesli sohbete "
+            f"katıldın. İşte istatiklerin:**\n\n"
+            f"Sunucu adı: **{guild_name}**\n"
+            f"Kaldığın süre: **{duration_text}**\n"
+            f"Sen çıkınca sesli sohbete kalan üye sayısı: "
+            f"**{remaining_members}**\n\n"
+            f"**Dynex sizin sunucu dostunuz…**"
+        )
+
+        try:
+            await member.send(message)
+        except discord.Forbidden:
+            print(
+                f"{member} DM'lerini kapattığı için "
+                f"ses istatistiği gönderilemedi."
+            )
+        except Exception as e:
+            print(
+                "SES İSTATİSTİĞİ DM HATASI:",
+                repr(e)
+            )
+
+
+# =========================================================
 # ÜYE GİRİŞ
 # =========================================================
 
@@ -1095,7 +1147,9 @@ async def on_member_join(member):
 
         if channel_id:
 
-            channel = member.guild.get_channel(channel_id)
+            channel = member.guild.get_channel(
+                channel_id
+            )
 
             if channel:
 
