@@ -24,8 +24,6 @@ bot = commands.Bot(
 CONFIG_FILE = "config.json"
 
 DEFAULT_CONFIG = {
-    "language": "tr",
-
     "ticket_enabled": False,
     "ticket_category": None,
     "ticket_role": None,
@@ -47,6 +45,7 @@ DEFAULT_CONFIG = {
 }
 
 configs = {}
+user_languages = {}
 voice_sessions = {}
 
 
@@ -55,23 +54,43 @@ voice_sessions = {}
 # =========================================================
 
 def load_config():
-    global configs
+    global configs, user_languages
 
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump({}, f, indent=4, ensure_ascii=False)
+            json.dump(
+                {
+                    "guilds": {},
+                    "users": {}
+                },
+                f,
+                indent=4,
+                ensure_ascii=False
+            )
 
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            configs = json.load(f)
+            data = json.load(f)
+
+            if "guilds" in data:
+                configs = data.get("guilds", {})
+                user_languages = data.get("users", {})
+            else:
+                configs = data
+                user_languages = {}
+
     except Exception:
         configs = {}
+        user_languages = {}
 
 
 def save_config():
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(
-            configs,
+            {
+                "guilds": configs,
+                "users": user_languages
+            },
             f,
             indent=4,
             ensure_ascii=False
@@ -98,17 +117,42 @@ def get_config(guild_id):
     return configs[guild_id]
 
 
-def get_language(guild_id):
-    config = get_config(guild_id)
+def get_language(user_id):
+    user_id = str(user_id)
 
-    language = config.get("language", "tr")
+    language = user_languages.get(
+        user_id,
+        "tr"
+    )
 
     if language not in ("tr", "en"):
         language = "tr"
-        config["language"] = "tr"
+        user_languages[user_id] = "tr"
         save_config()
 
     return language
+
+
+def set_language(user_id, language):
+    user_languages[str(user_id)] = language
+    save_config()
+
+
+def t(user_id, key, **kwargs):
+    language = get_language(user_id)
+
+    text = TEXTS[language].get(
+        key,
+        TEXTS["en"].get(key, key)
+    )
+
+    if kwargs:
+        try:
+            text = text.format(**kwargs)
+        except Exception:
+            pass
+
+    return text
 
 
 load_config()
@@ -119,20 +163,34 @@ load_config()
 # =========================================================
 
 TEXTS = {
+
     "tr": {
-        "language_name": "Türkçe",
 
         "language_title": "Dynex Dil Ayarları",
         "language_description": "Dynex'in kullanacağı dili seç.",
         "turkish": "Türkçe",
         "english": "English",
-        "language_changed": "Dynex dili **Türkçe** olarak ayarlandı.",
-        "language_changed_en": "Dynex language has been changed to **English**.",
 
-        "no_permission": "Bu komutu kullanmak için Yönetici yetkisine sahip olmalısın.",
+        "language_changed_tr":
+            "Dynex dili **Türkçe** olarak ayarlandı.",
 
-        "settings_title": "Dynex Ayarları",
-        "settings_description": "Aşağıdaki butonlardan sunucunun sistemlerini yönetebilirsin.",
+        "language_changed_en":
+            "Dynex language has been changed to **English**.",
+
+        "already_tr":
+            "Zaten **Türkçe** kullanıyorsun.",
+
+        "already_en":
+            "You are already using **English**.",
+
+        "no_permission":
+            "Bu komutu kullanmak için Yönetici yetkisine sahip olmalısın.",
+
+        "settings_title":
+            "Dynex Ayarları",
+
+        "settings_description":
+            "Aşağıdaki butonlardan sunucunun sistemlerini yönetebilirsin.",
 
         "ticket": "Ticket",
         "log": "Log",
@@ -151,186 +209,358 @@ TEXTS = {
         "role": "Rol",
         "status": "Durum",
 
-        "ticket_settings": "Ticket Sistemi Ayarları",
-        "panel_title": "Panel başlığı",
-        "panel_description": "Panel açıklaması",
-        "category_id": "Ticket kategori ID",
-        "role_id": "Ticket yetkili rol ID",
-        "internal_message": "Ticket iç mesajı",
+        "ticket_settings":
+            "Ticket Sistemi Ayarları",
 
-        "ticket_panel_created": "Ticket paneli oluşturuldu.",
-        "invalid_category_role": "Kategori ve rol ID'si sayı olmalıdır.",
-        "category_not_found": "Girilen kategori bulunamadı.",
-        "role_not_found": "Girilen yetkili rolü bulunamadı.",
+        "panel_title":
+            "Panel başlığı",
 
-        "create_ticket": "Ticket Aç",
-        "close_ticket": "Ticket Kapat",
-        "add_member": "Üye Ekle",
-        "create_ticket_title": "Ticket Oluştur",
-        "problem": "Sorun",
-        "problem_placeholder": "Sorununuzu buraya yazın...",
+        "panel_description":
+            "Panel açıklaması",
 
-        "ticket_not_found": "Ticket kategorisi bulunamadı.",
-        "ticket_role_not_found": "Ticket yetkili rolü bulunamadı.",
-        "already_ticket": "Zaten açık bir ticketın var:",
-        "ticket_created": "Ticket oluşturuldu:",
-        "ticket": "Ticket",
-        "ticket_problem": "Ticketiniz sorun:",
-        "ticket_closing": "Ticket 5 saniye içinde kapatılıyor.",
-        "not_ticket": "Bu kanal bir ticket değil.",
-        "owner_not_found": "Ticket sahibi bulunamadı.",
-        "ticket_owner_or_staff": "Bu butonu sadece ticket sahibi veya ticket yetkilisi kullanabilir.",
+        "category_id":
+            "Ticket kategori ID",
 
-        "add_member_title": "Ticket'a Üye Ekle",
-        "member_id": "Üye ID",
-        "member_id_placeholder": "Eklemek istediğin kullanıcının ID'si",
-        "invalid_member_id": "Geçerli bir kullanıcı ID'si gir.",
-        "member_not_found": "Bu kullanıcı sunucuda bulunamadı.",
-        "member_added": "ticket'a eklendi.",
-        "member_add_failed": "Kullanıcı ticket'a eklenemedi.",
+        "role_id":
+            "Ticket yetkili rol ID",
 
-        "log_settings": "Log Ayarları",
-        "log_channel_id": "Log kanal ID",
-        "invalid_channel": "Bu ID bir yazı kanalına ait değil.",
-        "log_configured": "Log sistemi ayarlandı.",
+        "internal_message":
+            "Ticket iç mesajı",
 
-        "welcome_settings": "Hoş Geldin Ayarları",
-        "welcome_channel_id": "Hoş geldin kanal ID",
-        "welcome_message": "Hoş geldin mesajı",
-        "welcome_configured": "Hoş geldin sistemi ayarlandı.",
+        "ticket_panel_created":
+            "Ticket paneli oluşturuldu.",
 
-        "autorole_settings": "Otorol Ayarları",
-        "autorole_id": "Otorol rol ID",
-        "autorole_configured": "Otorol ayarlandı.",
+        "invalid_category_role":
+            "Kategori ve rol ID'si sayı olmalıdır.",
 
-        "reset_done": "Tüm ayarlar sıfırlandı.",
+        "category_not_found":
+            "Girilen kategori bulunamadı.",
 
-        "ping_title": "Dynex Ping",
+        "role_not_found":
+            "Girilen yetkili rolü bulunamadı.",
 
-        "voice_title": "ses istatikleri",
-        "voice_intro": "Bugün {guild} adlı sunucuda sesli sohbete katıldın. İşte istatiklerin:",
-        "server_name": "Sunucu adı",
-        "time": "Kaldığın süre",
-        "remaining": "Sen çıkınca sesli sohbete kalan üye sayısı",
-        "footer": "Dynex sizin sunucu dostunuz…",
+        "create_ticket":
+            "Ticket Aç",
 
-        "seconds": "saniye",
-        "minutes": "dakika",
-        "hours": "saat"
+        "close_ticket":
+            "Ticket Kapat",
+
+        "add_member":
+            "Üye Ekle",
+
+        "create_ticket_title":
+            "Ticket Oluştur",
+
+        "problem":
+            "Sorun",
+
+        "problem_placeholder":
+            "Sorununuzu buraya yazın...",
+
+        "ticket_not_found":
+            "Ticket kategorisi bulunamadı.",
+
+        "ticket_role_not_found":
+            "Ticket yetkili rolü bulunamadı.",
+
+        "already_ticket":
+            "Zaten açık bir ticketın var:",
+
+        "ticket_created":
+            "Ticket oluşturuldu:",
+
+        "ticket_problem":
+            "Ticketiniz sorun:",
+
+        "ticket_closing":
+            "Ticket 5 saniye içinde kapatılıyor.",
+
+        "not_ticket":
+            "Bu kanal bir ticket değil.",
+
+        "owner_not_found":
+            "Ticket sahibi bulunamadı.",
+
+        "ticket_owner_or_staff":
+            "Bu butonu sadece ticket sahibi veya ticket yetkilisi kullanabilir.",
+
+        "add_member_title":
+            "Ticket'a Üye Ekle",
+
+        "member_id":
+            "Üye ID",
+
+        "member_id_placeholder":
+            "Eklemek istediğin kullanıcının ID'si",
+
+        "invalid_member_id":
+            "Geçerli bir kullanıcı ID'si gir.",
+
+        "member_not_found":
+            "Bu kullanıcı sunucuda bulunamadı.",
+
+        "member_added":
+            "ticket'a eklendi.",
+
+        "member_add_failed":
+            "Kullanıcı ticket'a eklenemedi.",
+
+        "log_settings":
+            "Log Ayarları",
+
+        "log_channel_id":
+            "Log kanal ID",
+
+        "invalid_channel":
+            "Bu ID bir yazı kanalına ait değil.",
+
+        "log_configured":
+            "Log sistemi ayarlandı.",
+
+        "welcome_settings":
+            "Hoş Geldin Ayarları",
+
+        "welcome_channel_id":
+            "Hoş geldin kanal ID",
+
+        "welcome_message":
+            "Hoş geldin mesajı",
+
+        "welcome_configured":
+            "Hoş geldin sistemi ayarlandı.",
+
+        "autorole_settings":
+            "Otorol Ayarları",
+
+        "autorole_id":
+            "Otorol rol ID",
+
+        "autorole_configured":
+            "Otorol ayarlandı.",
+
+        "reset_done":
+            "Tüm ayarlar sıfırlandı.",
+
+        "ping_title":
+            "Dynex Ping"
     },
 
     "en": {
-        "language_name": "English",
 
-        "language_title": "Dynex Language Settings",
-        "language_description": "Choose the language Dynex will use.",
-        "turkish": "Türkçe",
-        "english": "English",
-        "language_changed": "Dynex language has been changed to **Turkish**.",
-        "language_changed_en": "Dynex language has been changed to **English**.",
+        "language_title":
+            "Dynex Language Settings",
 
-        "no_permission": "You need Administrator permission to use this command.",
+        "language_description":
+            "Choose the language Dynex will use.",
 
-        "settings_title": "Dynex Settings",
-        "settings_description": "Manage your server systems using the buttons below.",
+        "turkish":
+            "Türkçe",
 
-        "ticket": "Ticket",
-        "log": "Log",
-        "welcome": "Welcome",
-        "autorole": "Autorole",
-        "moderation": "Moderation",
-        "refresh": "Refresh",
-        "reset": "Reset",
+        "english":
+            "English",
 
-        "open": "Enabled",
-        "closed": "Disabled",
-        "not_set": "Not set",
-        "category": "Category",
-        "authorized_role": "Authorized role",
-        "channel": "Channel",
-        "role": "Role",
-        "status": "Status",
+        "language_changed_tr":
+            "Dynex dili **Türkçe** olarak ayarlandı.",
 
-        "ticket_settings": "Ticket System Settings",
-        "panel_title": "Panel title",
-        "panel_description": "Panel description",
-        "category_id": "Ticket category ID",
-        "role_id": "Ticket staff role ID",
-        "internal_message": "Ticket internal message",
+        "language_changed_en":
+            "Dynex language has been changed to **English**.",
 
-        "ticket_panel_created": "Ticket panel created.",
-        "invalid_category_role": "Category and role IDs must be numbers.",
-        "category_not_found": "The specified category could not be found.",
-        "role_not_found": "The specified staff role could not be found.",
+        "already_tr":
+            "You are already using **Turkish**.",
 
-        "create_ticket": "Open Ticket",
-        "close_ticket": "Close Ticket",
-        "add_member": "Add Member",
-        "create_ticket_title": "Create Ticket",
-        "problem": "Problem",
-        "problem_placeholder": "Describe your problem...",
+        "already_en":
+            "You are already using **English**.",
 
-        "ticket_not_found": "The ticket category could not be found.",
-        "ticket_role_not_found": "The ticket staff role could not be found.",
-        "already_ticket": "You already have an open ticket:",
-        "ticket_created": "Ticket created:",
-        "ticket_problem": "Your ticket problem:",
-        "ticket_closing": "The ticket will be closed in 5 seconds.",
-        "not_ticket": "This channel is not a ticket.",
-        "owner_not_found": "The ticket owner could not be found.",
-        "ticket_owner_or_staff": "Only the ticket owner or ticket staff can use this button.",
+        "no_permission":
+            "You need Administrator permission to use this command.",
 
-        "add_member_title": "Add Member to Ticket",
-        "member_id": "Member ID",
-        "member_id_placeholder": "Enter the user's Discord ID",
-        "invalid_member_id": "Enter a valid user ID.",
-        "member_not_found": "This user could not be found in the server.",
-        "member_added": "has been added to the ticket.",
-        "member_add_failed": "The user could not be added to the ticket.",
+        "settings_title":
+            "Dynex Settings",
 
-        "log_settings": "Log Settings",
-        "log_channel_id": "Log channel ID",
-        "invalid_channel": "This ID is not a text channel.",
-        "log_configured": "Log system configured.",
+        "settings_description":
+            "Manage your server systems using the buttons below.",
 
-        "welcome_settings": "Welcome Settings",
-        "welcome_channel_id": "Welcome channel ID",
-        "welcome_message": "Welcome message",
-        "welcome_configured": "Welcome system configured.",
+        "ticket":
+            "Ticket",
 
-        "autorole_settings": "Autorole Settings",
-        "autorole_id": "Autorole role ID",
-        "autorole_configured": "Autorole configured.",
+        "log":
+            "Log",
 
-        "reset_done": "All settings have been reset.",
+        "welcome":
+            "Welcome",
 
-        "ping_title": "Dynex Ping",
+        "autorole":
+            "Autorole",
 
-        "voice_title": "voice statistics",
-        "voice_intro": "Today you joined the voice chat on the {guild} server. Here are your statistics:",
-        "server_name": "Server name",
-        "time": "Time spent",
-        "remaining": "Members remaining in voice after you left",
-        "footer": "Dynex is your server's friend…",
+        "moderation":
+            "Moderation",
 
-        "seconds": "seconds",
-        "minutes": "minutes",
-        "hours": "hours"
+        "refresh":
+            "Refresh",
+
+        "reset":
+            "Reset",
+
+        "open":
+            "Enabled",
+
+        "closed":
+            "Disabled",
+
+        "not_set":
+            "Not set",
+
+        "category":
+            "Category",
+
+        "authorized_role":
+            "Authorized role",
+
+        "channel":
+            "Channel",
+
+        "role":
+            "Role",
+
+        "status":
+            "Status",
+
+        "ticket_settings":
+            "Ticket System Settings",
+
+        "panel_title":
+            "Panel title",
+
+        "panel_description":
+            "Panel description",
+
+        "category_id":
+            "Ticket category ID",
+
+        "role_id":
+            "Ticket staff role ID",
+
+        "internal_message":
+            "Ticket internal message",
+
+        "ticket_panel_created":
+            "Ticket panel created.",
+
+        "invalid_category_role":
+            "Category and role IDs must be numbers.",
+
+        "category_not_found":
+            "The specified category could not be found.",
+
+        "role_not_found":
+            "The specified staff role could not be found.",
+
+        "create_ticket":
+            "Open Ticket",
+
+        "close_ticket":
+            "Close Ticket",
+
+        "add_member":
+            "Add Member",
+
+        "create_ticket_title":
+            "Create Ticket",
+
+        "problem":
+            "Problem",
+
+        "problem_placeholder":
+            "Describe your problem...",
+
+        "ticket_not_found":
+            "The ticket category could not be found.",
+
+        "ticket_role_not_found":
+            "The ticket staff role could not be found.",
+
+        "already_ticket":
+            "You already have an open ticket:",
+
+        "ticket_created":
+            "Ticket created:",
+
+        "ticket_problem":
+            "Your ticket problem:",
+
+        "ticket_closing":
+            "The ticket will be closed in 5 seconds.",
+
+        "not_ticket":
+            "This channel is not a ticket.",
+
+        "owner_not_found":
+            "The ticket owner could not be found.",
+
+        "ticket_owner_or_staff":
+            "Only the ticket owner or ticket staff can use this button.",
+
+        "add_member_title":
+            "Add Member to Ticket",
+
+        "member_id":
+            "Member ID",
+
+        "member_id_placeholder":
+            "Enter the user's Discord ID",
+
+        "invalid_member_id":
+            "Enter a valid user ID.",
+
+        "member_not_found":
+            "This user could not be found in the server.",
+
+        "member_added":
+            "has been added to the ticket.",
+
+        "member_add_failed":
+            "The user could not be added to the ticket.",
+
+        "log_settings":
+            "Log Settings",
+
+        "log_channel_id":
+            "Log channel ID",
+
+        "invalid_channel":
+            "This ID is not a text channel.",
+
+        "log_configured":
+            "Log system configured.",
+
+        "welcome_settings":
+            "Welcome Settings",
+
+        "welcome_channel_id":
+            "Welcome channel ID",
+
+        "welcome_message":
+            "Welcome message",
+
+        "welcome_configured":
+            "Welcome system configured.",
+
+        "autorole_settings":
+            "Autorole Settings",
+
+        "autorole_id":
+            "Autorole role ID",
+
+        "autorole_configured":
+            "Autorole configured.",
+
+        "reset_done":
+            "All settings have been reset.",
+
+        "ping_title":
+            "Dynex Ping"
     }
 }
-
-
-def t(guild_id, key, **kwargs):
-    language = get_language(guild_id)
-    text = TEXTS[language].get(key, TEXTS["en"].get(key, key))
-
-    if kwargs:
-        try:
-            text = text.format(**kwargs)
-        except:
-            pass
-
-    return text
 
 
 # =========================================================
@@ -361,14 +591,31 @@ class LanguageSelect(discord.ui.Select):
 
     async def callback(self, interaction):
 
-        language = self.values[0]
+        new_language = self.values[0]
+        current_language = get_language(
+            interaction.user.id
+        )
 
-        config = get_config(interaction.guild.id)
-        config["language"] = language
-        save_config()
+        if new_language == current_language:
 
-        if language == "tr":
-            message = TEXTS["tr"]["language_changed"]
+            if new_language == "tr":
+                message = TEXTS["tr"]["already_tr"]
+            else:
+                message = TEXTS["en"]["already_en"]
+
+            await interaction.response.send_message(
+                f"<:Dynexhayir:1555265003727102134> {message}",
+                ephemeral=True
+            )
+            return
+
+        set_language(
+            interaction.user.id,
+            new_language
+        )
+
+        if new_language == "tr":
+            message = TEXTS["tr"]["language_changed_tr"]
         else:
             message = TEXTS["en"]["language_changed_en"]
 
@@ -382,105 +629,119 @@ class LanguageSelect(discord.ui.Select):
 class LanguageView(discord.ui.View):
 
     def __init__(self):
-        super().__init__(timeout=180)
-        self.add_item(LanguageSelect())
+        super().__init__(
+            timeout=180
+        )
+
+        self.add_item(
+            LanguageSelect()
+        )
 
 
 # =========================================================
 # AYARLAR EMBED
 # =========================================================
 
-def settings_embed(guild):
+def settings_embed(guild, user_id):
 
-    config = get_config(guild.id)
+    config = get_config(
+        guild.id
+    )
 
     ticket_category = (
         f"<#{config['ticket_category']}>"
         if config["ticket_category"]
-        else t(guild.id, "not_set")
+        else t(user_id, "not_set")
     )
 
     ticket_role = (
         f"<@&{config['ticket_role']}>"
         if config["ticket_role"]
-        else t(guild.id, "not_set")
+        else t(user_id, "not_set")
     )
 
     log_channel = (
         f"<#{config['log_channel']}>"
         if config["log_channel"]
-        else t(guild.id, "not_set")
+        else t(user_id, "not_set")
     )
 
     welcome_channel = (
         f"<#{config['welcome_channel']}>"
         if config["welcome_channel"]
-        else t(guild.id, "not_set")
+        else t(user_id, "not_set")
     )
 
     autorole = (
         f"<@&{config['autorole']}>"
         if config["autorole"]
-        else t(guild.id, "not_set")
+        else t(user_id, "not_set")
     )
 
-    enabled = t(guild.id, "open")
-    disabled = t(guild.id, "closed")
+    enabled = t(
+        user_id,
+        "open"
+    )
+
+    disabled = t(
+        user_id,
+        "closed"
+    )
 
     embed = discord.Embed(
-        title=f"⚙️ {t(guild.id, 'settings_title')}",
+        title=f"⚙️ {t(user_id, 'settings_title')}",
         description=t(
-            guild.id,
+            user_id,
             "settings_description"
         ),
         color=discord.Color.blue()
     )
 
     embed.add_field(
-        name=f"🎫 {t(guild.id, 'ticket')}",
+        name=f"🎫 {t(user_id, 'ticket')}",
         value=(
-            f"{t(guild.id, 'status')}: "
+            f"{t(user_id, 'status')}: "
             f"**{enabled if config['ticket_enabled'] else disabled}**\n"
-            f"{t(guild.id, 'category')}: {ticket_category}\n"
-            f"{t(guild.id, 'authorized_role')}: {ticket_role}"
+            f"{t(user_id, 'category')}: {ticket_category}\n"
+            f"{t(user_id, 'authorized_role')}: {ticket_role}"
         ),
         inline=False
     )
 
     embed.add_field(
-        name=f"📋 {t(guild.id, 'log')}",
+        name=f"📋 {t(user_id, 'log')}",
         value=(
-            f"{t(guild.id, 'status')}: "
+            f"{t(user_id, 'status')}: "
             f"**{enabled if config['log_enabled'] else disabled}**\n"
-            f"{t(guild.id, 'channel')}: {log_channel}"
+            f"{t(user_id, 'channel')}: {log_channel}"
         ),
         inline=True
     )
 
     embed.add_field(
-        name=f"👋 {t(guild.id, 'welcome')}",
+        name=f"👋 {t(user_id, 'welcome')}",
         value=(
-            f"{t(guild.id, 'status')}: "
+            f"{t(user_id, 'status')}: "
             f"**{enabled if config['welcome_enabled'] else disabled}**\n"
-            f"{t(guild.id, 'channel')}: {welcome_channel}"
+            f"{t(user_id, 'channel')}: {welcome_channel}"
         ),
         inline=True
     )
 
     embed.add_field(
-        name=f"🎭 {t(guild.id, 'autorole')}",
+        name=f"🎭 {t(user_id, 'autorole')}",
         value=(
-            f"{t(guild.id, 'status')}: "
+            f"{t(user_id, 'status')}: "
             f"**{enabled if config['autorole_enabled'] else disabled}**\n"
-            f"{t(guild.id, 'role')}: {autorole}"
+            f"{t(user_id, 'role')}: {autorole}"
         ),
         inline=True
     )
 
     embed.add_field(
-        name=f"🛡️ {t(guild.id, 'moderation')}",
+        name=f"🛡️ {t(user_id, 'moderation')}",
         value=(
-            f"{t(guild.id, 'status')}: "
+            f"{t(user_id, 'status')}: "
             f"**{enabled if config['moderation_enabled'] else disabled}**"
         ),
         inline=True
@@ -493,86 +754,121 @@ def settings_embed(guild):
 # TICKET AYARLARI
 # =========================================================
 
-class TicketSettingsModal(
-    discord.ui.Modal,
-    title="Ticket System Settings"
-):
+class TicketSettingsModal(discord.ui.Modal):
 
-    title_input = discord.ui.TextInput(
-        label="Panel title",
-        placeholder="Destek Talebi",
-        default="Destek Talebi",
-        max_length=100
-    )
+    def __init__(self, user_id):
 
-    description_input = discord.ui.TextInput(
-        label="Panel description",
-        placeholder="Destek almak için butona tıklayın.",
-        default="Destek almak için aşağıdaki butona tıklayın.",
-        style=discord.TextStyle.paragraph,
-        max_length=1000
-    )
+        self.user_id = user_id
 
-    category_input = discord.ui.TextInput(
-        label="Ticket category ID",
-        placeholder="Kategori ID'sini gir",
-        required=True,
-        max_length=30
-    )
+        language = get_language(
+            user_id
+        )
 
-    role_input = discord.ui.TextInput(
-        label="Ticket staff role ID",
-        placeholder="Yetkili rolünün ID'sini gir",
-        required=True,
-        max_length=30
-    )
+        super().__init__(
+            title=TEXTS[language]["ticket_settings"]
+        )
 
-    message_input = discord.ui.TextInput(
-        label="Ticket internal message",
-        placeholder="Ticketiniz başarıyla oluşturuldu.",
-        default="Ticketiniz başarıyla oluşturuldu.",
-        style=discord.TextStyle.paragraph,
-        max_length=1500
-    )
+        self.title_input = discord.ui.TextInput(
+            label=TEXTS[language]["panel_title"],
+            placeholder="Destek Talebi",
+            default="Destek Talebi",
+            max_length=100
+        )
+
+        self.description_input = discord.ui.TextInput(
+            label=TEXTS[language]["panel_description"],
+            placeholder="Destek almak için butona tıklayın.",
+            default="Destek almak için aşağıdaki butona tıklayın.",
+            style=discord.TextStyle.paragraph,
+            max_length=1000
+        )
+
+        self.category_input = discord.ui.TextInput(
+            label=TEXTS[language]["category_id"],
+            placeholder="Kategori ID'sini gir",
+            required=True,
+            max_length=30
+        )
+
+        self.role_input = discord.ui.TextInput(
+            label=TEXTS[language]["role_id"],
+            placeholder="Yetkili rolünün ID'sini gir",
+            required=True,
+            max_length=30
+        )
+
+        self.message_input = discord.ui.TextInput(
+            label=TEXTS[language]["internal_message"],
+            placeholder="Ticketiniz başarıyla oluşturuldu.",
+            default="Ticketiniz başarıyla oluşturuldu.",
+            style=discord.TextStyle.paragraph,
+            max_length=1500
+        )
+
+        self.add_item(self.title_input)
+        self.add_item(self.description_input)
+        self.add_item(self.category_input)
+        self.add_item(self.role_input)
+        self.add_item(self.message_input)
 
     async def on_submit(self, interaction):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
 
         try:
-            category_id = int(self.category_input.value)
-            role_id = int(self.role_input.value)
-        except:
+            category_id = int(
+                self.category_input.value
+            )
+
+            role_id = int(
+                self.role_input.value
+            )
+
+        except Exception:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'invalid_category_role')}",
+                f"{t(user_id, 'invalid_category_role')}",
                 ephemeral=True
             )
+
             return
 
-        category = interaction.guild.get_channel(category_id)
-        role = interaction.guild.get_role(role_id)
+        category = interaction.guild.get_channel(
+            category_id
+        )
 
-        if not isinstance(category, discord.CategoryChannel):
+        role = interaction.guild.get_role(
+            role_id
+        )
+
+        if not isinstance(
+            category,
+            discord.CategoryChannel
+        ):
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'category_not_found')}",
+                f"{t(user_id, 'category_not_found')}",
                 ephemeral=True
             )
+
             return
 
         if not role:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'role_not_found')}",
+                f"{t(user_id, 'role_not_found')}",
                 ephemeral=True
             )
+
             return
 
-        config = get_config(guild_id)
+        config = get_config(
+            guild_id
+        )
 
         config["ticket_enabled"] = True
         config["ticket_category"] = category_id
@@ -596,7 +892,7 @@ class TicketSettingsModal(
 
         await interaction.response.send_message(
             f"<:Dynexevet:1555263066235605023> "
-            f"{t(guild_id, 'ticket_panel_created')}",
+            f"{t(user_id, 'ticket_panel_created')}",
             ephemeral=True
         )
 
@@ -605,24 +901,41 @@ class TicketSettingsModal(
 # TICKET PROBLEM
 # =========================================================
 
-class TicketProblemModal(
-    discord.ui.Modal,
-    title="Create Ticket"
-):
+class TicketProblemModal(discord.ui.Modal):
 
-    problem = discord.ui.TextInput(
-        label="Problem",
-        placeholder="Describe your problem...",
-        style=discord.TextStyle.paragraph,
-        required=True,
-        min_length=2,
-        max_length=2000
-    )
+    def __init__(self, user_id):
+
+        self.user_id = user_id
+
+        language = get_language(
+            user_id
+        )
+
+        super().__init__(
+            title=TEXTS[language]["create_ticket_title"]
+        )
+
+        self.problem = discord.ui.TextInput(
+            label=TEXTS[language]["problem"],
+            placeholder=TEXTS[language]["problem_placeholder"],
+            style=discord.TextStyle.paragraph,
+            required=True,
+            min_length=2,
+            max_length=2000
+        )
+
+        self.add_item(
+            self.problem
+        )
 
     async def on_submit(self, interaction):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
-        config = get_config(guild_id)
+
+        config = get_config(
+            guild_id
+        )
 
         category = interaction.guild.get_channel(
             config.get("ticket_category")
@@ -632,22 +945,27 @@ class TicketProblemModal(
             config.get("ticket_role")
         )
 
-        if not isinstance(category, discord.CategoryChannel):
+        if not isinstance(
+            category,
+            discord.CategoryChannel
+        ):
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'ticket_not_found')}",
+                f"{t(user_id, 'ticket_not_found')}",
                 ephemeral=True
             )
+
             return
 
         if not role:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'ticket_role_not_found')}",
+                f"{t(user_id, 'ticket_role_not_found')}",
                 ephemeral=True
             )
+
             return
 
         channel_name = (
@@ -665,13 +983,15 @@ class TicketProblemModal(
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'already_ticket')} "
+                f"{t(user_id, 'already_ticket')} "
                 f"{existing.mention}",
                 ephemeral=True
             )
+
             return
 
         overwrites = {
+
             interaction.guild.default_role:
                 discord.PermissionOverwrite(
                     view_channel=False
@@ -712,10 +1032,10 @@ class TicketProblemModal(
         )
 
         embed = discord.Embed(
-            title=f"🎫 {t(guild_id, 'ticket')}",
+            title=f"🎫 {t(user_id, 'ticket')}",
             description=(
                 f"{config.get('ticket_message')}\n\n"
-                f"**{t(guild_id, 'ticket_problem')}**\n"
+                f"**{t(user_id, 'ticket_problem')}**\n"
                 f"{self.problem.value}"
             ),
             color=discord.Color.blue()
@@ -736,7 +1056,8 @@ class TicketProblemModal(
 
         await interaction.response.send_message(
             f"<:Dynexevet:1555263066235605023> "
-            f"{t(guild_id, 'ticket_created')} {channel.mention}",
+            f"{t(user_id, 'ticket_created')} "
+            f"{channel.mention}",
             ephemeral=True
         )
 
@@ -745,22 +1066,39 @@ class TicketProblemModal(
 # ADD MEMBER
 # =========================================================
 
-class AddMemberModal(
-    discord.ui.Modal,
-    title="Add Member to Ticket"
-):
+class AddMemberModal(discord.ui.Modal):
 
-    member_id = discord.ui.TextInput(
-        label="Member ID",
-        placeholder="Enter the user's Discord ID",
-        required=True,
-        max_length=30
-    )
+    def __init__(self, user_id):
+
+        self.user_id = user_id
+
+        language = get_language(
+            user_id
+        )
+
+        super().__init__(
+            title=TEXTS[language]["add_member_title"]
+        )
+
+        self.member_id = discord.ui.TextInput(
+            label=TEXTS[language]["member_id"],
+            placeholder=TEXTS[language]["member_id_placeholder"],
+            required=True,
+            max_length=30
+        )
+
+        self.add_item(
+            self.member_id
+        )
 
     async def on_submit(self, interaction):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
-        config = get_config(guild_id)
+
+        config = get_config(
+            guild_id
+        )
 
         role = interaction.guild.get_role(
             config.get("ticket_role")
@@ -770,48 +1108,63 @@ class AddMemberModal(
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'not_ticket')}",
+                f"{t(user_id, 'not_ticket')}",
                 ephemeral=True
             )
+
             return
 
         try:
             owner_id = int(
                 interaction.channel.topic.split(":")[1]
             )
-        except:
+
+        except Exception:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'owner_not_found')}",
+                f"{t(user_id, 'owner_not_found')}",
                 ephemeral=True
             )
+
             return
 
-        is_owner = interaction.user.id == owner_id
-        is_authorized = role and role in interaction.user.roles
+        is_owner = (
+            interaction.user.id == owner_id
+        )
+
+        is_authorized = (
+            role and role in interaction.user.roles
+        )
 
         if not is_owner and not is_authorized:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'ticket_owner_or_staff')}",
+                f"{t(user_id, 'ticket_owner_or_staff')}",
                 ephemeral=True
             )
+
             return
 
         try:
-            member_id = int(self.member_id.value)
-        except:
+            member_id = int(
+                self.member_id.value
+            )
+
+        except Exception:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'invalid_member_id')}",
+                f"{t(user_id, 'invalid_member_id')}",
                 ephemeral=True
             )
+
             return
 
-        member = interaction.guild.get_member(member_id)
+        member = interaction.guild.get_member(
+            member_id
+        )
 
         if not member:
 
@@ -819,16 +1172,18 @@ class AddMemberModal(
                 member = await interaction.guild.fetch_member(
                     member_id
                 )
-            except:
+
+            except Exception:
                 member = None
 
         if not member:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'member_not_found')}",
+                f"{t(user_id, 'member_not_found')}",
                 ephemeral=True
             )
+
             return
 
         try:
@@ -842,18 +1197,20 @@ class AddMemberModal(
                 embed_links=True
             )
 
-        except:
+        except Exception:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'member_add_failed')}",
+                f"{t(user_id, 'member_add_failed')}",
                 ephemeral=True
             )
+
             return
 
         await interaction.response.send_message(
             f"<:Dynexevet:1555263066235605023> "
-            f"{member.mention} {t(guild_id, 'member_added')}"
+            f"{member.mention} "
+            f"{t(user_id, 'member_added')}"
         )
 
 
@@ -861,12 +1218,12 @@ class AddMemberModal(
 # TICKET PANEL
 # =========================================================
 
-class TicketPanelView(
-    discord.ui.View
-):
+class TicketPanelView(discord.ui.View):
 
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(
+            timeout=None
+        )
 
     @discord.ui.button(
         label="Ticket Aç",
@@ -881,16 +1238,22 @@ class TicketPanelView(
     ):
 
         await interaction.response.send_modal(
-            TicketProblemModal()
+            TicketProblemModal(
+                interaction.user.id
+            )
         )
 
 
-class TicketCloseView(
-    discord.ui.View
-):
+# =========================================================
+# TICKET CLOSE VIEW
+# =========================================================
+
+class TicketCloseView(discord.ui.View):
 
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(
+            timeout=None
+        )
 
     @discord.ui.button(
         label="Ticket Kapat",
@@ -904,8 +1267,12 @@ class TicketCloseView(
         button
     ):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
-        config = get_config(guild_id)
+
+        config = get_config(
+            guild_id
+        )
 
         role = interaction.guild.get_role(
             config.get("ticket_role")
@@ -914,36 +1281,45 @@ class TicketCloseView(
         if not interaction.channel.topic:
 
             await interaction.response.send_message(
-                t(guild_id, "not_ticket"),
+                t(user_id, "not_ticket"),
                 ephemeral=True
             )
+
             return
 
         try:
             owner_id = int(
                 interaction.channel.topic.split(":")[1]
             )
-        except:
+
+        except Exception:
 
             await interaction.response.send_message(
-                t(guild_id, "owner_not_found"),
+                t(user_id, "owner_not_found"),
                 ephemeral=True
             )
+
             return
 
-        is_owner = interaction.user.id == owner_id
-        is_authorized = role and role in interaction.user.roles
+        is_owner = (
+            interaction.user.id == owner_id
+        )
+
+        is_authorized = (
+            role and role in interaction.user.roles
+        )
 
         if not is_owner and not is_authorized:
 
             await interaction.response.send_message(
-                t(guild_id, "ticket_owner_or_staff"),
+                t(user_id, "ticket_owner_or_staff"),
                 ephemeral=True
             )
+
             return
 
         await interaction.response.send_message(
-            f"🔒 {t(guild_id, 'ticket_closing')}"
+            f"🔒 {t(user_id, 'ticket_closing')}"
         )
 
         await asyncio.sleep(5)
@@ -952,7 +1328,8 @@ class TicketCloseView(
             await interaction.channel.delete(
                 reason=f"Ticket closed by {interaction.user}"
             )
-        except:
+
+        except Exception:
             pass
 
     @discord.ui.button(
@@ -967,8 +1344,12 @@ class TicketCloseView(
         button
     ):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
-        config = get_config(guild_id)
+
+        config = get_config(
+            guild_id
+        )
 
         role = interaction.guild.get_role(
             config.get("ticket_role")
@@ -977,36 +1358,47 @@ class TicketCloseView(
         if not interaction.channel.topic:
 
             await interaction.response.send_message(
-                t(guild_id, "not_ticket"),
+                t(user_id, "not_ticket"),
                 ephemeral=True
             )
+
             return
 
         try:
             owner_id = int(
                 interaction.channel.topic.split(":")[1]
             )
-        except:
+
+        except Exception:
 
             await interaction.response.send_message(
-                t(guild_id, "owner_not_found"),
+                t(user_id, "owner_not_found"),
                 ephemeral=True
             )
+
             return
 
-        is_owner = interaction.user.id == owner_id
-        is_authorized = role and role in interaction.user.roles
+        is_owner = (
+            interaction.user.id == owner_id
+        )
+
+        is_authorized = (
+            role and role in interaction.user.roles
+        )
 
         if not is_owner and not is_authorized:
 
             await interaction.response.send_message(
-                t(guild_id, "ticket_owner_or_staff"),
+                t(user_id, "ticket_owner_or_staff"),
                 ephemeral=True
             )
+
             return
 
         await interaction.response.send_modal(
-            AddMemberModal()
+            AddMemberModal(
+                interaction.user.id
+            )
         )
 
 
@@ -1014,45 +1406,71 @@ class TicketCloseView(
 # LOG
 # =========================================================
 
-class LogModal(
-    discord.ui.Modal,
-    title="Log Settings"
-):
+class LogModal(discord.ui.Modal):
 
-    channel_id = discord.ui.TextInput(
-        label="Log channel ID",
-        placeholder="Enter channel ID",
-        required=True,
-        max_length=30
-    )
+    def __init__(self, user_id):
+
+        self.user_id = user_id
+
+        language = get_language(
+            user_id
+        )
+
+        super().__init__(
+            title=TEXTS[language]["log_settings"]
+        )
+
+        self.channel_id = discord.ui.TextInput(
+            label=TEXTS[language]["log_channel_id"],
+            placeholder="Enter channel ID",
+            required=True,
+            max_length=30
+        )
+
+        self.add_item(
+            self.channel_id
+        )
 
     async def on_submit(self, interaction):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
 
         try:
-            channel_id = int(self.channel_id.value)
-        except:
+            channel_id = int(
+                self.channel_id.value
+            )
+
+        except Exception:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'invalid_channel')}",
+                f"{t(user_id, 'invalid_channel')}",
                 ephemeral=True
             )
+
             return
 
-        channel = interaction.guild.get_channel(channel_id)
+        channel = interaction.guild.get_channel(
+            channel_id
+        )
 
-        if not isinstance(channel, discord.TextChannel):
+        if not isinstance(
+            channel,
+            discord.TextChannel
+        ):
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'invalid_channel')}",
+                f"{t(user_id, 'invalid_channel')}",
                 ephemeral=True
             )
+
             return
 
-        config = get_config(guild_id)
+        config = get_config(
+            guild_id
+        )
 
         config["log_enabled"] = True
         config["log_channel"] = channel_id
@@ -1061,7 +1479,7 @@ class LogModal(
 
         await interaction.response.send_message(
             f"<:Dynexevet:1555263066235605023> "
-            f"{t(guild_id, 'log_configured')}",
+            f"{t(user_id, 'log_configured')}",
             ephemeral=True
         )
 
@@ -1070,53 +1488,83 @@ class LogModal(
 # WELCOME
 # =========================================================
 
-class WelcomeModal(
-    discord.ui.Modal,
-    title="Welcome Settings"
-):
+class WelcomeModal(discord.ui.Modal):
 
-    channel_id = discord.ui.TextInput(
-        label="Welcome channel ID",
-        placeholder="Enter channel ID",
-        required=True,
-        max_length=30
-    )
+    def __init__(self, user_id):
 
-    message = discord.ui.TextInput(
-        label="Welcome message",
-        placeholder="Hoş geldin {user}!",
-        default="Hoş geldin {user}!",
-        style=discord.TextStyle.paragraph,
-        max_length=1000
-    )
+        self.user_id = user_id
+
+        language = get_language(
+            user_id
+        )
+
+        super().__init__(
+            title=TEXTS[language]["welcome_settings"]
+        )
+
+        self.channel_id = discord.ui.TextInput(
+            label=TEXTS[language]["welcome_channel_id"],
+            placeholder="Enter channel ID",
+            required=True,
+            max_length=30
+        )
+
+        self.message = discord.ui.TextInput(
+            label=TEXTS[language]["welcome_message"],
+            placeholder="Hoş geldin {user}!",
+            default="Hoş geldin {user}!",
+            style=discord.TextStyle.paragraph,
+            max_length=1000
+        )
+
+        self.add_item(
+            self.channel_id
+        )
+
+        self.add_item(
+            self.message
+        )
 
     async def on_submit(self, interaction):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
 
         try:
-            channel_id = int(self.channel_id.value)
-        except:
+            channel_id = int(
+                self.channel_id.value
+            )
+
+        except Exception:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'invalid_channel')}",
+                f"{t(user_id, 'invalid_channel')}",
                 ephemeral=True
             )
+
             return
 
-        channel = interaction.guild.get_channel(channel_id)
+        channel = interaction.guild.get_channel(
+            channel_id
+        )
 
-        if not isinstance(channel, discord.TextChannel):
+        if not isinstance(
+            channel,
+            discord.TextChannel
+        ):
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'invalid_channel')}",
+                f"{t(user_id, 'invalid_channel')}",
                 ephemeral=True
             )
+
             return
 
-        config = get_config(guild_id)
+        config = get_config(
+            guild_id
+        )
 
         config["welcome_enabled"] = True
         config["welcome_channel"] = channel_id
@@ -1126,7 +1574,7 @@ class WelcomeModal(
 
         await interaction.response.send_message(
             f"<:Dynexevet:1555263066235605023> "
-            f"{t(guild_id, 'welcome_configured')}",
+            f"{t(user_id, 'welcome_configured')}",
             ephemeral=True
         )
 
@@ -1135,45 +1583,68 @@ class WelcomeModal(
 # AUTOROLE
 # =========================================================
 
-class AutoroleModal(
-    discord.ui.Modal,
-    title="Autorole Settings"
-):
+class AutoroleModal(discord.ui.Modal):
 
-    role_id = discord.ui.TextInput(
-        label="Autorole role ID",
-        placeholder="Enter role ID",
-        required=True,
-        max_length=30
-    )
+    def __init__(self, user_id):
+
+        self.user_id = user_id
+
+        language = get_language(
+            user_id
+        )
+
+        super().__init__(
+            title=TEXTS[language]["autorole_settings"]
+        )
+
+        self.role_id = discord.ui.TextInput(
+            label=TEXTS[language]["autorole_id"],
+            placeholder="Enter role ID",
+            required=True,
+            max_length=30
+        )
+
+        self.add_item(
+            self.role_id
+        )
 
     async def on_submit(self, interaction):
 
+        user_id = interaction.user.id
         guild_id = interaction.guild.id
 
         try:
-            role_id = int(self.role_id.value)
-        except:
+            role_id = int(
+                self.role_id.value
+            )
+
+        except Exception:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'role_not_found')}",
+                f"{t(user_id, 'role_not_found')}",
                 ephemeral=True
             )
+
             return
 
-        role = interaction.guild.get_role(role_id)
+        role = interaction.guild.get_role(
+            role_id
+        )
 
         if not role:
 
             await interaction.response.send_message(
                 f"<:Dynexhayir:1555265003727102134> "
-                f"{t(guild_id, 'role_not_found')}",
+                f"{t(user_id, 'role_not_found')}",
                 ephemeral=True
             )
+
             return
 
-        config = get_config(guild_id)
+        config = get_config(
+            guild_id
+        )
 
         config["autorole_enabled"] = True
         config["autorole"] = role_id
@@ -1182,7 +1653,7 @@ class AutoroleModal(
 
         await interaction.response.send_message(
             f"<:Dynexevet:1555263066235605023> "
-            f"{t(guild_id, 'autorole_configured')}",
+            f"{t(user_id, 'autorole_configured')}",
             ephemeral=True
         )
 
@@ -1191,22 +1662,28 @@ class AutoroleModal(
 # AYARLAR VIEW
 # =========================================================
 
-class SettingsView(
-    discord.ui.View
-):
+class SettingsView(discord.ui.View):
 
     def __init__(self):
-        super().__init__(timeout=300)
+        super().__init__(
+            timeout=300
+        )
 
     @discord.ui.button(
         label="Ticket",
         emoji="🎫",
         style=discord.ButtonStyle.primary
     )
-    async def ticket(self, interaction, button):
+    async def ticket(
+        self,
+        interaction,
+        button
+    ):
 
         await interaction.response.send_modal(
-            TicketSettingsModal()
+            TicketSettingsModal(
+                interaction.user.id
+            )
         )
 
     @discord.ui.button(
@@ -1214,10 +1691,16 @@ class SettingsView(
         emoji="📋",
         style=discord.ButtonStyle.secondary
     )
-    async def log(self, interaction, button):
+    async def log(
+        self,
+        interaction,
+        button
+    ):
 
         await interaction.response.send_modal(
-            LogModal()
+            LogModal(
+                interaction.user.id
+            )
         )
 
     @discord.ui.button(
@@ -1225,10 +1708,16 @@ class SettingsView(
         emoji="👋",
         style=discord.ButtonStyle.secondary
     )
-    async def welcome(self, interaction, button):
+    async def welcome(
+        self,
+        interaction,
+        button
+    ):
 
         await interaction.response.send_modal(
-            WelcomeModal()
+            WelcomeModal(
+                interaction.user.id
+            )
         )
 
     @discord.ui.button(
@@ -1236,10 +1725,16 @@ class SettingsView(
         emoji="🎭",
         style=discord.ButtonStyle.secondary
     )
-    async def autorole(self, interaction, button):
+    async def autorole(
+        self,
+        interaction,
+        button
+    ):
 
         await interaction.response.send_modal(
-            AutoroleModal()
+            AutoroleModal(
+                interaction.user.id
+            )
         )
 
     @discord.ui.button(
@@ -1247,9 +1742,15 @@ class SettingsView(
         emoji="🛡️",
         style=discord.ButtonStyle.secondary
     )
-    async def moderation(self, interaction, button):
+    async def moderation(
+        self,
+        interaction,
+        button
+    ):
 
-        config = get_config(interaction.guild.id)
+        config = get_config(
+            interaction.guild.id
+        )
 
         config["moderation_enabled"] = not config[
             "moderation_enabled"
@@ -1258,7 +1759,10 @@ class SettingsView(
         save_config()
 
         await interaction.response.edit_message(
-            embed=settings_embed(interaction.guild),
+            embed=settings_embed(
+                interaction.guild,
+                interaction.user.id
+            ),
             view=self
         )
 
@@ -1268,10 +1772,17 @@ class SettingsView(
         style=discord.ButtonStyle.success,
         row=1
     )
-    async def refresh(self, interaction, button):
+    async def refresh(
+        self,
+        interaction,
+        button
+    ):
 
         await interaction.response.edit_message(
-            embed=settings_embed(interaction.guild),
+            embed=settings_embed(
+                interaction.guild,
+                interaction.user.id
+            ),
             view=self
         )
 
@@ -1281,7 +1792,11 @@ class SettingsView(
         style=discord.ButtonStyle.danger,
         row=1
     )
-    async def reset(self, interaction, button):
+    async def reset(
+        self,
+        interaction,
+        button
+    ):
 
         configs[str(interaction.guild.id)] = (
             DEFAULT_CONFIG.copy()
@@ -1290,7 +1805,10 @@ class SettingsView(
         save_config()
 
         await interaction.response.edit_message(
-            embed=settings_embed(interaction.guild),
+            embed=settings_embed(
+                interaction.guild,
+                interaction.user.id
+            ),
             view=self
         )
 
@@ -1318,94 +1836,38 @@ class SettingsView(
         )
     ]
 )
-@app_commands.checks.has_permissions(
-    administrator=True
-)
 async def dil(
     interaction,
     dil: app_commands.Choice[str]
 ):
 
-    config = get_config(interaction.guild.id)
+    user_id = interaction.user.id
 
-    config["language"] = dil.value
-
-    save_config()
-
-    if dil.value == "tr":
-        message = TEXTS["tr"]["language_changed"]
-    else:
-        message = TEXTS["en"]["language_changed_en"]
-
-    await interaction.response.send_message(
-        f"🌐 {message}",
-        ephemeral=True
+    current_language = get_language(
+        user_id
     )
 
+    if dil.value == current_language:
 
-@dil.error
-async def dil_error(interaction, error):
-
-    if isinstance(
-        error,
-        app_commands.errors.MissingPermissions
-    ):
-
-        language = get_language(interaction.guild.id)
-
-        message = TEXTS[language]["no_permission"]
-
-        if interaction.response.is_done():
-            await interaction.followup.send(
-                message,
-                ephemeral=True
-            )
+        if dil.value == "tr":
+            message = TEXTS["tr"]["already_tr"]
         else:
-            await interaction.response.send_message(
-                message,
-                ephemeral=True
-            )
+            message = TEXTS["en"]["already_en"]
 
-
-# =========================================================
-# /LANGUAGE
-# =========================================================
-
-@bot.tree.command(
-    name="language",
-    description="Change Dynex language."
-)
-@app_commands.describe(
-    language="Choose the language."
-)
-@app_commands.choices(
-    language=[
-        app_commands.Choice(
-            name="Türkçe",
-            value="tr"
-        ),
-        app_commands.Choice(
-            name="English",
-            value="en"
+        await interaction.response.send_message(
+            f"<:Dynexhayir:1555265003727102134> {message}",
+            ephemeral=True
         )
-    ]
-)
-@app_commands.checks.has_permissions(
-    administrator=True
-)
-async def language(
-    interaction,
-    language: app_commands.Choice[str]
-):
 
-    config = get_config(interaction.guild.id)
+        return
 
-    config["language"] = language.value
+    set_language(
+        user_id,
+        dil.value
+    )
 
-    save_config()
-
-    if language.value == "tr":
-        message = TEXTS["tr"]["language_changed"]
+    if dil.value == "tr":
+        message = TEXTS["tr"]["language_changed_tr"]
     else:
         message = TEXTS["en"]["language_changed_en"]
 
@@ -1429,76 +1891,45 @@ async def language(
 async def ayarlar(interaction):
 
     await interaction.response.send_message(
-        embed=settings_embed(interaction.guild),
+        embed=settings_embed(
+            interaction.guild,
+            interaction.user.id
+        ),
         view=SettingsView(),
         ephemeral=True
     )
 
-
-# =========================================================
-# /SETTINGS
-# =========================================================
-
-@bot.tree.command(
-    name="settings",
-    description="Manage Dynex server settings."
-)
-@app_commands.checks.has_permissions(
-    administrator=True
-)
-async def settings(interaction):
-
-    await interaction.response.send_message(
-        embed=settings_embed(interaction.guild),
-        view=SettingsView(),
-        ephemeral=True
-    )
-
-
-# =========================================================
-# SETTINGS ERRORS
-# =========================================================
 
 @ayarlar.error
-async def ayarlar_error(interaction, error):
+async def ayarlar_error(
+    interaction,
+    error
+):
 
     if isinstance(
         error,
         app_commands.errors.MissingPermissions
     ):
 
-        language = get_language(interaction.guild.id)
+        user_id = interaction.user.id
 
         if interaction.response.is_done():
+
             await interaction.followup.send(
-                TEXTS[language]["no_permission"],
+                t(
+                    user_id,
+                    "no_permission"
+                ),
                 ephemeral=True
             )
+
         else:
+
             await interaction.response.send_message(
-                TEXTS[language]["no_permission"],
-                ephemeral=True
-            )
-
-
-@settings.error
-async def settings_error(interaction, error):
-
-    if isinstance(
-        error,
-        app_commands.errors.MissingPermissions
-    ):
-
-        language = get_language(interaction.guild.id)
-
-        if interaction.response.is_done():
-            await interaction.followup.send(
-                TEXTS[language]["no_permission"],
-                ephemeral=True
-            )
-        else:
-            await interaction.response.send_message(
-                TEXTS[language]["no_permission"],
+                t(
+                    user_id,
+                    "no_permission"
+                ),
                 ephemeral=True
             )
 
@@ -1509,7 +1940,7 @@ async def settings_error(interaction, error):
 
 @bot.tree.command(
     name="ping",
-    description="Dynex gecikmesini gösterir / Show Dynex latency."
+    description="Dynex gecikmesini gösterir."
 )
 async def ping(interaction):
 
@@ -1518,7 +1949,7 @@ async def ping(interaction):
     )
 
     await interaction.response.send_message(
-        f"🏓 **{t(interaction.guild.id, 'ping_title')}**\n"
+        f"🏓 **{t(interaction.user.id, 'ping_title')}**\n"
         f"**{latency}ms**"
     )
 
@@ -1542,17 +1973,22 @@ async def send_voice_statistics(
     if language == "tr":
 
         if hours > 0:
+
             duration_text = (
                 f"{hours} saat "
                 f"{minutes} dakika "
                 f"{seconds} saniye"
             )
+
         elif minutes > 0:
+
             duration_text = (
                 f"{minutes} dakika "
                 f"{seconds} saniye"
             )
+
         else:
+
             duration_text = (
                 f"{seconds} saniye"
             )
@@ -1571,17 +2007,22 @@ async def send_voice_statistics(
     else:
 
         if hours > 0:
+
             duration_text = (
                 f"{hours} hours "
                 f"{minutes} minutes "
                 f"{seconds} seconds"
             )
+
         elif minutes > 0:
+
             duration_text = (
                 f"{minutes} minutes "
                 f"{seconds} seconds"
             )
+
         else:
+
             duration_text = (
                 f"{seconds} seconds"
             )
@@ -1598,26 +2039,37 @@ async def send_voice_statistics(
         )
 
     try:
+
         dm = await member.create_dm()
-        await dm.send(message)
+
+        await dm.send(
+            message
+        )
+
         return True
 
     except discord.Forbidden:
+
         print(
             f"DM kapalı: {member} ({member.id})"
         )
+
         return False
 
     except discord.HTTPException as e:
+
         print(
             f"DM HTTP hatası: {member} | {e}"
         )
+
         return False
 
     except Exception as e:
+
         print(
             f"DM gönderme hatası: {member} | {repr(e)}"
         )
+
         return False
 
 
@@ -1632,13 +2084,18 @@ async def on_voice_state_update(
     # SES KANALINA GİRİŞ
     # =====================================================
 
-    if before.channel is None and after.channel is not None:
+    if (
+        before.channel is None
+        and after.channel is not None
+    ):
 
         voice_sessions[
             (member.guild.id, member.id)
         ] = {
             "channel_id": after.channel.id,
-            "started_at": datetime.now(timezone.utc)
+            "started_at": datetime.now(
+                timezone.utc
+            )
         }
 
         return
@@ -1660,7 +2117,9 @@ async def on_voice_state_update(
 
         voice_sessions[key] = {
             "channel_id": after.channel.id,
-            "started_at": datetime.now(timezone.utc)
+            "started_at": datetime.now(
+                timezone.utc
+            )
         }
 
         return
@@ -1669,7 +2128,10 @@ async def on_voice_state_update(
     # SESTEN ÇIKIŞ
     # =====================================================
 
-    if before.channel is not None and after.channel is None:
+    if (
+        before.channel is not None
+        and after.channel is None
+    ):
 
         key = (
             member.guild.id,
@@ -1685,7 +2147,10 @@ async def on_voice_state_update(
             return
 
         started_at = session["started_at"]
-        ended_at = datetime.now(timezone.utc)
+
+        ended_at = datetime.now(
+            timezone.utc
+        )
 
         duration_seconds = int(
             (
@@ -1696,13 +2161,12 @@ async def on_voice_state_update(
         if duration_seconds < 0:
             duration_seconds = 0
 
-        # Kullanıcı çıktıktan sonraki kişi sayısı
         remaining_members = len(
             before.channel.members
         )
 
         language = get_language(
-            member.guild.id
+            member.id
         )
 
         await send_voice_statistics(
@@ -1725,11 +2189,17 @@ async def on_member_join(member):
         member.guild.id
     )
 
-    # Otorol
+    # =====================================================
+    # OTOROL
+    # =====================================================
 
-    if config.get("autorole_enabled"):
+    if config.get(
+        "autorole_enabled"
+    ):
 
-        role_id = config.get("autorole")
+        role_id = config.get(
+            "autorole"
+        )
 
         if role_id:
 
@@ -1740,15 +2210,21 @@ async def on_member_join(member):
             if role:
 
                 try:
+
                     await member.add_roles(
                         role
                     )
-                except:
+
+                except Exception:
                     pass
 
-    # Hoş geldin
+    # =====================================================
+    # HOŞ GELDİN
+    # =====================================================
 
-    if config.get("welcome_enabled"):
+    if config.get(
+        "welcome_enabled"
+    ):
 
         channel_id = config.get(
             "welcome_channel"
@@ -1773,10 +2249,12 @@ async def on_member_join(member):
                 )
 
                 try:
+
                     await channel.send(
                         message
                     )
-                except:
+
+                except Exception:
                     pass
 
 
