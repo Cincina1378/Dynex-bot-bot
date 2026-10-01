@@ -1,3 +1,4 @@
 discord.py
-yt-dlp
+yt-dlp[default]
+yt-dlp-ejs
 PyNaCl
