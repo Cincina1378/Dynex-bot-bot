@@ -6,6 +6,10 @@ import json
 import copy
 import re
 
+# =========================================================
+# TOKEN
+# =========================================================
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 CONFIG_FILE = "config.json"
 
@@ -99,9 +103,7 @@ T = {
         "image_saved": "Ticket resmi kaydedildi.",
         "image_removed": "Ticket resmi kaldırıldı.",
 
-        "ticket_open": "Ticket Aç",
         "ticket_close": "Ticket Kapat",
-        "add_member": "Üye Ekle",
 
         "problem": "Talep",
         "problem_placeholder": "Sorununuzu veya talebinizi yazın.",
@@ -127,9 +129,7 @@ T = {
         "select_category": "Kategori Seç",
 
         "welcome_message": "Hoş Geldin Mesajı",
-        "edit_message": "Mesajı Düzenle",
-
-        "voice": "Ses Bildirimleri"
+        "edit_message": "Mesajı Düzenle"
     },
 
     "en": {
@@ -180,9 +180,7 @@ T = {
         "image_saved": "Ticket image saved.",
         "image_removed": "Ticket image removed.",
 
-        "ticket_open": "Open Ticket",
         "ticket_close": "Close Ticket",
-        "add_member": "Add Member",
 
         "problem": "Request",
         "problem_placeholder": "Describe your problem or request.",
@@ -208,9 +206,7 @@ T = {
         "select_category": "Select Category",
 
         "welcome_message": "Welcome Message",
-        "edit_message": "Edit Message",
-
-        "voice": "Voice Notifications"
+        "edit_message": "Edit Message"
     },
 
     "az": {
@@ -261,9 +257,7 @@ T = {
         "image_saved": "Ticket şəkli yadda saxlanıldı.",
         "image_removed": "Ticket şəkli silindi.",
 
-        "ticket_open": "Ticket Aç",
         "ticket_close": "Ticket Bağla",
-        "add_member": "Üzv Əlavə Et",
 
         "problem": "Müraciət",
         "problem_placeholder": "Probleminizi və ya müraciətinizi yazın.",
@@ -289,9 +283,7 @@ T = {
         "select_category": "Kateqoriya Seç",
 
         "welcome_message": "Qarşılama Mesajı",
-        "edit_message": "Mesajı Dəyiş",
-
-        "voice": "Səs Bildirişləri"
+        "edit_message": "Mesajı Dəyiş"
     }
 }
 
@@ -307,9 +299,7 @@ DEFAULT = {
         "category": None,
         "role": None,
         "channel": None,
-
         "message": "Destek talebi oluşturmak için aşağıdaki seçeneklerden birini seçin.",
-
         "image_url": None,
 
         "options": [
@@ -350,10 +340,11 @@ DEFAULT = {
 configs = {}
 
 # =========================================================
-# DATA
+# CONFIG
 # =========================================================
 
 def load_data():
+
     global configs
 
     if not os.path.exists(CONFIG_FILE):
@@ -361,17 +352,23 @@ def load_data():
         return
 
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f)
 
-        if isinstance(raw, dict) and "configs" in raw:
-            raw = raw["configs"]
+        with open(
+            CONFIG_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
 
-        if not isinstance(raw, dict):
+            data = json.load(f)
+
+        if "configs" in data:
+            data = data["configs"]
+
+        if not isinstance(data, dict):
             configs = {}
             return
 
-        for guild_id, old_config in raw.items():
+        for guild_id, old_config in data.items():
 
             config = copy.deepcopy(DEFAULT)
 
@@ -387,24 +384,47 @@ def load_data():
                     "autorole",
                     "moderation"
                 ]:
-                    if isinstance(old_config.get(section), dict):
-                        config[section].update(old_config[section])
 
-            if not isinstance(config["ticket"].get("options"), list):
-                config["ticket"]["options"] = copy.deepcopy(
-                    DEFAULT["ticket"]["options"]
-                )
+                    if isinstance(
+                        old_config.get(section),
+                        dict
+                    ):
+
+                        config[section].update(
+                            old_config[section]
+                        )
+
+            if not isinstance(
+                config["ticket"].get("options"),
+                list
+            ):
+
+                config["ticket"]["options"] = []
 
             configs[str(guild_id)] = config
 
-    except Exception:
+    except Exception as error:
+
+        print(
+            "Config yüklenemedi:",
+            error
+        )
+
         configs = {}
 
 
 def save_data():
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+
+    with open(
+        CONFIG_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
         json.dump(
-            {"configs": configs},
+            {
+                "configs": configs
+            },
             f,
             ensure_ascii=False,
             indent=4
@@ -412,17 +432,28 @@ def save_data():
 
 
 def get_config(guild_id):
+
     guild_id = str(guild_id)
 
     if guild_id not in configs:
-        configs[guild_id] = copy.deepcopy(DEFAULT)
+
+        configs[guild_id] = copy.deepcopy(
+            DEFAULT
+        )
+
         save_data()
 
     return configs[guild_id]
 
 
 def get_lang(guild_id):
-    language = get_config(guild_id).get("language", "tr")
+
+    language = get_config(
+        guild_id
+    ).get(
+        "language",
+        "tr"
+    )
 
     if language not in LANGS:
         language = "tr"
@@ -431,23 +462,38 @@ def get_lang(guild_id):
 
 
 def text(guild_id, key):
-    language = get_lang(guild_id)
+
+    language = get_lang(
+        guild_id
+    )
 
     return T.get(
         language,
         T["tr"]
     ).get(
         key,
-        T["tr"].get(key, key)
+        T["tr"].get(
+            key,
+            key
+        )
     )
 
 
-def enabled_text(guild_id, value):
+def enabled_text(
+    guild_id,
+    enabled
+):
+
+    if enabled:
+
+        return (
+            f"{E['yes']} "
+            f"{text(guild_id, 'on')}"
+        )
+
     return (
-        f"{E['yes']} {text(guild_id, 'on')}"
-        if value
-        else
-        f"{E['no']} {text(guild_id, 'off')}"
+        f"{E['no']} "
+        f"{text(guild_id, 'off')}"
     )
 
 # =========================================================
@@ -457,24 +503,68 @@ def enabled_text(guild_id, value):
 class DynexBot(commands.Bot):
 
     def __init__(self):
+
         super().__init__(
             command_prefix="!",
             intents=INTENTS
         )
 
     async def setup_hook(self):
+
         await self.tree.sync()
 
 
 bot = DynexBot()
 
 # =========================================================
-# LANGUAGE
+# EMOJI PARSER
 # =========================================================
 
-class LanguageSelect(discord.ui.Select):
+def parse_button_emoji(value):
+
+    if not value:
+        return None
+
+    value = str(value).strip()
+
+    # <:name:id>
+    # <a:name:id>
+    match = re.fullmatch(
+        r"<(a?):([A-Za-z0-9_]+):(\d+)>",
+        value
+    )
+
+    if match:
+
+        animated = bool(
+            match.group(1)
+        )
+
+        name = match.group(2)
+
+        emoji_id = int(
+            match.group(3)
+        )
+
+        return discord.PartialEmoji(
+            name=name,
+            id=emoji_id,
+            animated=animated
+        )
+
+    # Unicode emoji
+    return value
+
+# =========================================================
+# /DİL
+# =========================================================
+
+class LanguageSelect(
+    discord.ui.Select
+):
 
     def __init__(self):
+
         super().__init__(
             placeholder="Türkçe / English / Azərbaycan",
             options=[
@@ -493,24 +583,35 @@ class LanguageSelect(discord.ui.Select):
             ]
         )
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
-        config = get_config(interaction.guild.id)
+        config = get_config(
+            interaction.guild.id
+        )
 
         config["language"] = self.values[0]
 
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {T[self.values[0]]['language_changed']}",
+            f"{E['yes']} "
+            f"{T[self.values[0]]['language_changed']}",
             ephemeral=True
         )
 
 
-class LanguageView(discord.ui.View):
+class LanguageView(
+    discord.ui.View
+):
 
     def __init__(self):
-        super().__init__(timeout=120)
+
+        super().__init__(
+            timeout=120
+        )
 
         self.add_item(
             LanguageSelect()
@@ -521,11 +622,18 @@ class LanguageView(discord.ui.View):
     name="dil",
     description="Dynex dilini değiştir."
 )
-async def dil(interaction):
+async def dil(
+    interaction: discord.Interaction
+):
 
     embed = discord.Embed(
-        title=f"{E['settings']} {text(interaction.guild.id, 'language')}",
-        description="Türkçe / English / Azərbaycan",
+        title=(
+            f"{E['settings']} "
+            f"{text(interaction.guild.id, 'language')}"
+        ),
+        description=(
+            "Türkçe / English / Azərbaycan"
+        ),
         color=discord.Color.blurple()
     )
 
@@ -536,36 +644,50 @@ async def dil(interaction):
     )
 
 # =========================================================
-# PING
+# /PING
 # =========================================================
 
 @bot.tree.command(
     name="ping",
     description="Dynex ping durumunu gösterir."
 )
-async def ping(interaction):
+async def ping(
+    interaction: discord.Interaction
+):
 
-    ms = round(bot.latency * 1000)
+    ms = round(
+        bot.latency * 1000
+    )
 
     if ms <= 80:
-        icon = E["correct"]
+        emoji = E["correct"]
+
     elif ms <= 150:
-        icon = E["yes"]
+        emoji = E["yes"]
+
     elif ms <= 250:
-        icon = E["wait"]
+        emoji = E["wait"]
+
     elif ms <= 400:
-        icon = E["alarm"]
+        emoji = E["alarm"]
+
     else:
-        icon = E["no"]
+        emoji = E["no"]
 
     embed = discord.Embed(
-        title=f"{E['dynex']} {text(interaction.guild.id, 'ping_title')}",
+        title=(
+            f"{E['dynex']} "
+            f"{text(interaction.guild.id, 'ping_title')}"
+        ),
         color=discord.Color.blurple()
     )
 
     embed.add_field(
-        name=text(interaction.guild.id, "ping"),
-        value=f"`{ms}ms` {icon}",
+        name=text(
+            interaction.guild.id,
+            "ping"
+        ),
+        value=f"`{ms}ms` {emoji}",
         inline=False
     )
 
@@ -574,21 +696,29 @@ async def ping(interaction):
     )
 
 # =========================================================
-# SETTINGS MAIN EMBED
+# AYARLAR ANA EMBED
 # =========================================================
 
 def settings_embed(guild_id):
 
-    config = get_config(guild_id)
+    config = get_config(
+        guild_id
+    )
 
     embed = discord.Embed(
-        title=f"{E['settings']} {text(guild_id, 'settings')}",
-        description=text(guild_id, "settings_desc"),
+        title=(
+            f"{E['settings']} "
+            f"{text(guild_id, 'settings')}"
+        ),
+        description=text(
+            guild_id,
+            "settings_desc"
+        ),
         color=discord.Color.blurple()
     )
 
     embed.add_field(
-        name=f"{E['locked']} {text(guild_id, 'ticket')}",
+        name=f"{E['locked']} Ticket",
         value=enabled_text(
             guild_id,
             config["ticket"]["enabled"]
@@ -597,7 +727,7 @@ def settings_embed(guild_id):
     )
 
     embed.add_field(
-        name=f"{E['discord']} {text(guild_id, 'logs')}",
+        name=f"{E['discord']} Loglar",
         value=enabled_text(
             guild_id,
             config["logs"]["enabled"]
@@ -606,7 +736,7 @@ def settings_embed(guild_id):
     )
 
     embed.add_field(
-        name=f"{E['yes']} {text(guild_id, 'welcome')}",
+        name=f"{E['yes']} Hoş Geldin",
         value=enabled_text(
             guild_id,
             config["welcome"]["enabled"]
@@ -615,7 +745,7 @@ def settings_embed(guild_id):
     )
 
     embed.add_field(
-        name=f"{E['settings']} {text(guild_id, 'autorole')}",
+        name=f"{E['settings']} Otorol",
         value=enabled_text(
             guild_id,
             config["autorole"]["enabled"]
@@ -624,7 +754,7 @@ def settings_embed(guild_id):
     )
 
     embed.add_field(
-        name=f"{E['shield'] if 'shield' in E else E['locked']} {text(guild_id, 'moderation')}",
+        name=f"{E['locked']} Moderasyon",
         value=enabled_text(
             guild_id,
             config["moderation"]["enabled"]
@@ -635,21 +765,28 @@ def settings_embed(guild_id):
     return embed
 
 # =========================================================
-# TICKET EMBED
+# TICKET AYAR EMBED
 # =========================================================
 
 def ticket_settings_embed(guild_id):
 
-    config = get_config(guild_id)
-    ticket = config["ticket"]
+    ticket = get_config(
+        guild_id
+    )["ticket"]
 
     embed = discord.Embed(
-        title=f"{E['locked']} {text(guild_id, 'ticket_settings')}",
+        title=(
+            f"{E['locked']} "
+            f"{text(guild_id, 'ticket_settings')}"
+        ),
         color=discord.Color.blurple()
     )
 
     embed.add_field(
-        name=text(guild_id, "enabled"),
+        name=text(
+            guild_id,
+            "enabled"
+        ),
         value=enabled_text(
             guild_id,
             ticket["enabled"]
@@ -658,70 +795,103 @@ def ticket_settings_embed(guild_id):
     )
 
     embed.add_field(
-        name=text(guild_id, "ticket_message"),
+        name=text(
+            guild_id,
+            "ticket_message"
+        ),
         value=ticket["message"][:1024],
         inline=False
     )
 
     embed.add_field(
-        name=text(guild_id, "staff_role"),
+        name=text(
+            guild_id,
+            "staff_role"
+        ),
         value=(
             f"<@&{ticket['role']}>"
-            if ticket["role"]
+            if ticket.get("role")
             else "—"
         ),
         inline=True
     )
 
     embed.add_field(
-        name=text(guild_id, "category"),
+        name=text(
+            guild_id,
+            "category"
+        ),
         value=(
             f"<#{ticket['category']}>"
-            if ticket["category"]
+            if ticket.get("category")
             else "—"
         ),
         inline=True
     )
 
     embed.add_field(
-        name=text(guild_id, "panel_channel"),
+        name=text(
+            guild_id,
+            "panel_channel"
+        ),
         value=(
             f"<#{ticket['channel']}>"
-            if ticket["channel"]
+            if ticket.get("channel")
             else "—"
         ),
         inline=True
     )
 
-    image_value = (
-        "Ayarlı"
-        if ticket.get("image_url")
-        else "Yok"
-    )
-
     embed.add_field(
-        name=text(guild_id, "ticket_image"),
-        value=image_value,
+        name=text(
+            guild_id,
+            "ticket_image"
+        ),
+        value=(
+            f"{E['yes']} Ayarlı"
+            if ticket.get("image_url")
+            else f"{E['no']} Yok"
+        ),
         inline=True
     )
 
-    options = ticket.get("options", [])
+    options = ticket.get(
+        "options",
+        []
+    )
 
     if options:
 
+        option_lines = []
+
+        for option in options:
+
+            emoji = option.get(
+                "emoji",
+                "🎫"
+            )
+
+            option_lines.append(
+                f"{emoji} **{option.get('name', 'Ticket')}** "
+                f"→ `{option.get('button', 'Ticket')}`"
+            )
+
         option_text = "\n".join(
-            f"{o.get('emoji', '🎫')} **{o.get('name', 'Seçenek')}** → `{o.get('button', o.get('name', 'Seçenek'))}`"
-            for o in options
+            option_lines
         )
 
     else:
+
         option_text = text(
             guild_id,
             "no_option"
         )
 
     embed.add_field(
-        name=text(guild_id, "options"),
+        name=text(
+            guild_id,
+            "options"
+        ),
         value=option_text[:1024],
         inline=False
     )
@@ -729,28 +899,25 @@ def ticket_settings_embed(guild_id):
     return embed
 
 # =========================================================
-# TICKET MESSAGE MODAL
+# TICKET MESAJ MODAL
 # =========================================================
 
-class TicketMessageModal(discord.ui.Modal):
+class TicketMessageModal(
+    discord.ui.Modal,
+    title="Ticket Mesajı"
+):
 
-    def __init__(self):
-        super().__init__(
-            title="Ticket Mesajı"
-        )
+    message_input = discord.ui.TextInput(
+        label="Ticket mesajı",
+        style=discord.TextStyle.paragraph,
+        max_length=2000,
+        required=True
+    )
 
-        self.message_input = discord.ui.TextInput(
-            label="Ticket mesajı",
-            style=discord.TextStyle.paragraph,
-            max_length=2000,
-            required=True
-        )
-
-        self.add_item(
-            self.message_input
-        )
-
-    async def on_submit(self, interaction):
+    async def on_submit(
+        self,
+        interaction
+    ):
 
         config = get_config(
             interaction.guild.id
@@ -763,33 +930,31 @@ class TicketMessageModal(discord.ui.Modal):
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'message_saved')}",
+            f"{E['yes']} "
+            f"{text(interaction.guild.id, 'message_saved')}",
             ephemeral=True
         )
 
 # =========================================================
-# IMAGE MODAL
+# RESİM MODAL
 # =========================================================
 
-class TicketImageModal(discord.ui.Modal):
+class TicketImageModal(
+    discord.ui.Modal,
+    title="Ticket Resmi"
+):
 
-    def __init__(self):
-        super().__init__(
-            title="Ticket Resmi"
-        )
+    image_url = discord.ui.TextInput(
+        label="Resim URL'si",
+        placeholder="https://example.com/resim.png",
+        max_length=1000,
+        required=True
+    )
 
-        self.image_url = discord.ui.TextInput(
-            label="Resim URL'si",
-            placeholder="https://example.com/resim.png",
-            max_length=1000,
-            required=True
-        )
-
-        self.add_item(
-            self.image_url
-        )
-
-    async def on_submit(self, interaction):
+    async def on_submit(
+        self,
+        interaction
+    ):
 
         url = self.image_url.value.strip()
 
@@ -798,10 +963,12 @@ class TicketImageModal(discord.ui.Modal):
             url,
             re.IGNORECASE
         ):
+
             await interaction.response.send_message(
-                f"{E['no']} Geçerli bir `http://` veya `https://` linki gir.",
+                f"{E['no']} Geçerli bir HTTP/HTTPS linki gir.",
                 ephemeral=True
             )
+
             return
 
         config = get_config(
@@ -813,47 +980,45 @@ class TicketImageModal(discord.ui.Modal):
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'image_saved')}",
+            f"{E['yes']} "
+            f"{text(interaction.guild.id, 'image_saved')}",
             ephemeral=True
         )
 
 # =========================================================
-# OPTION ADD MODAL
+# SEÇENEK EKLE MODAL
 # =========================================================
 
-class AddOptionModal(discord.ui.Modal):
+class AddOptionModal(
+    discord.ui.Modal,
+    title="Seçenek Ekle"
+):
 
-    def __init__(self):
-        super().__init__(
-            title="Seçenek Ekle"
-        )
+    name_input = discord.ui.TextInput(
+        label="Seçenek adı",
+        placeholder="Şikayet",
+        max_length=60,
+        required=True
+    )
 
-        self.name_input = discord.ui.TextInput(
-            label="Seçenek adı",
-            placeholder="Şikayet",
-            max_length=60,
-            required=True
-        )
+    button_input = discord.ui.TextInput(
+        label="Buton yazısı",
+        placeholder="Şikayet",
+        max_length=60,
+        required=True
+    )
 
-        self.button_input = discord.ui.TextInput(
-            label="Buton yazısı",
-            placeholder="Şikayet",
-            max_length=60,
-            required=True
-        )
+    emoji_input = discord.ui.TextInput(
+        label="Buton emojisi",
+        placeholder="📝 veya <:Dynex:1555263060350996510>",
+        max_length=100,
+        required=False
+    )
 
-        self.emoji_input = discord.ui.TextInput(
-            label="Buton emojisi",
-            placeholder="📝",
-            max_length=100,
-            required=False
-        )
-
-        self.add_item(self.name_input)
-        self.add_item(self.button_input)
-        self.add_item(self.emoji_input)
-
-    async def on_submit(self, interaction):
+    async def on_submit(
+        self,
+        interaction
+    ):
 
         config = get_config(
             interaction.guild.id
@@ -872,71 +1037,36 @@ class AddOptionModal(discord.ui.Modal):
 
         options.append(
             {
-                "name": self.name_input.value,
-                "button": self.button_input.value,
-                "emoji": self.emoji_input.value or "🎫"
+                "name": self.name_input.value.strip(),
+                "button": self.button_input.value.strip(),
+                "emoji": (
+                    self.emoji_input.value.strip()
+                    or "🎫"
+                )
             }
         )
 
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'option_added')}",
+            f"{E['yes']} "
+            f"{text(interaction.guild.id, 'option_added')}",
             ephemeral=True
         )
 
 # =========================================================
-# OPTION EDIT MODAL
+# SEÇENEK DÜZENLE MODAL
 # =========================================================
 
-class EditOptionModal(discord.ui.Modal):
+class EditOptionModal(
+    discord.ui.Modal
+):
 
-    def __init__(self, index):
-
-        super().__init__(
-            title="Seçenek Düzenle"
-        )
-
-        self.index = index
-
-        config = get_config(
-            interaction_guild_placeholder()
-        )
-
-        # Alanlar callback içinde tekrar doldurulacak.
-        self.name_input = discord.ui.TextInput(
-            label="Seçenek adı",
-            max_length=60
-        )
-
-        self.button_input = discord.ui.TextInput(
-            label="Buton yazısı",
-            max_length=60
-        )
-
-        self.emoji_input = discord.ui.TextInput(
-            label="Buton emojisi",
-            max_length=100,
-            required=False
-        )
-
-        self.add_item(self.name_input)
-        self.add_item(self.button_input)
-        self.add_item(self.emoji_input)
-
-
-def interaction_guild_placeholder():
-    # Modal oluşturulurken guild bilgisi mevcut olmadığı için
-    # sadece güvenli bir boş yapı döndürür.
-    return "0"
-
-# =========================================================
-# FIXED EDIT MODAL
-# =========================================================
-
-class RealEditOptionModal(discord.ui.Modal):
-
-    def __init__(self, guild_id, index):
+    def __init__(
+        self,
+        guild_id,
+        index
+    ):
 
         super().__init__(
             title="Seçenek Düzenle"
@@ -945,34 +1075,54 @@ class RealEditOptionModal(discord.ui.Modal):
         self.guild_id = guild_id
         self.index = index
 
-        options = get_config(guild_id)["ticket"]["options"]
-
-        current = options[index]
+        option = get_config(
+            guild_id
+        )["ticket"]["options"][index]
 
         self.name_input = discord.ui.TextInput(
             label="Seçenek adı",
             max_length=60,
-            default=current.get("name", "")
+            default=option.get(
+                "name",
+                ""
+            )
         )
 
         self.button_input = discord.ui.TextInput(
             label="Buton yazısı",
             max_length=60,
-            default=current.get("button", "")
+            default=option.get(
+                "button",
+                ""
+            )
         )
 
         self.emoji_input = discord.ui.TextInput(
             label="Buton emojisi",
             max_length=100,
             required=False,
-            default=current.get("emoji", "")
+            default=option.get(
+                "emoji",
+                ""
+            )
         )
 
-        self.add_item(self.name_input)
-        self.add_item(self.button_input)
-        self.add_item(self.emoji_input)
+        self.add_item(
+            self.name_input
+        )
 
-    async def on_submit(self, interaction):
+        self.add_item(
+            self.button_input
+        )
+
+        self.add_item(
+            self.emoji_input
+        )
+
+    async def on_submit(
+        self,
+        interaction
+    ):
 
         options = get_config(
             interaction.guild.id
@@ -988,26 +1138,34 @@ class RealEditOptionModal(discord.ui.Modal):
             return
 
         options[self.index] = {
-            "name": self.name_input.value,
-            "button": self.button_input.value,
-            "emoji": self.emoji_input.value or "🎫"
+            "name": self.name_input.value.strip(),
+            "button": self.button_input.value.strip(),
+            "emoji": (
+                self.emoji_input.value.strip()
+                or "🎫"
+            )
         }
 
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'option_edited')}",
+            f"{E['yes']} "
+            f"{text(interaction.guild.id, 'option_edited')}",
             ephemeral=True
         )
 
 # =========================================================
-# ROLE SELECT
+# ROL SELECT
 # =========================================================
 
-class TicketRoleSelect(discord.ui.RoleSelect):
+class TicketRoleSelect(
+    discord.ui.RoleSelect
+):
 
-    def __init__(self, guild_id):
-        self.guild_id = guild_id
+    def __init__(
+        self,
+        guild_id
+    ):
 
         super().__init__(
             placeholder=text(
@@ -1016,29 +1174,38 @@ class TicketRoleSelect(discord.ui.RoleSelect):
             )
         )
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
         config = get_config(
             interaction.guild.id
         )
 
-        config["ticket"]["role"] = self.values[0].id
+        config["ticket"]["role"] = (
+            self.values[0].id
+        )
 
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'staff_role')} kaydedildi.",
+            f"{E['yes']} Yetkili rolü kaydedildi.",
             ephemeral=True
         )
 
 # =========================================================
-# CATEGORY SELECT
+# KATEGORİ SELECT
 # =========================================================
 
-class TicketCategorySelect(discord.ui.ChannelSelect):
+class TicketCategorySelect(
+    discord.ui.ChannelSelect
+):
 
-    def __init__(self, guild_id):
-        self.guild_id = guild_id
+    def __init__(
+        self,
+        guild_id
+    ):
 
         super().__init__(
             placeholder=text(
@@ -1050,29 +1217,38 @@ class TicketCategorySelect(discord.ui.ChannelSelect):
             ]
         )
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
         config = get_config(
             interaction.guild.id
         )
 
-        config["ticket"]["category"] = self.values[0].id
+        config["ticket"]["category"] = (
+            self.values[0].id
+        )
 
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'category')} kaydedildi.",
+            f"{E['yes']} Ticket kategorisi kaydedildi.",
             ephemeral=True
         )
 
 # =========================================================
-# PANEL CHANNEL SELECT
+# PANEL KANALI SELECT
 # =========================================================
 
-class TicketPanelChannelSelect(discord.ui.ChannelSelect):
+class TicketPanelChannelSelect(
+    discord.ui.ChannelSelect
+):
 
-    def __init__(self, guild_id):
-        self.guild_id = guild_id
+    def __init__(
+        self,
+        guild_id
+    ):
 
         super().__init__(
             placeholder=text(
@@ -1084,30 +1260,38 @@ class TicketPanelChannelSelect(discord.ui.ChannelSelect):
             ]
         )
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
         config = get_config(
             interaction.guild.id
         )
 
-        config["ticket"]["channel"] = self.values[0].id
+        config["ticket"]["channel"] = (
+            self.values[0].id
+        )
 
         save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'panel_channel')} kaydedildi.",
+            f"{E['yes']} Panel kanalı kaydedildi.",
             ephemeral=True
         )
 
 # =========================================================
-# OPTION DELETE SELECT
+# SEÇENEK SİL SELECT
 # =========================================================
 
-class OptionDeleteSelect(discord.ui.Select):
+class OptionDeleteSelect(
+    discord.ui.Select
+):
 
-    def __init__(self, guild_id):
-
-        self.guild_id = guild_id
+    def __init__(
+        self,
+        guild_id
+    ):
 
         options = get_config(
             guild_id
@@ -1119,11 +1303,40 @@ class OptionDeleteSelect(discord.ui.Select):
             options[:25]
         ):
 
+            emoji_value = option.get(
+                "emoji",
+                ""
+            )
+
+            # SelectOption emoji özel emoji ise
+            # PartialEmoji olarak gönder.
+            parsed = parse_button_emoji(
+                emoji_value
+            )
+
+            kwargs = {
+                "label": option.get(
+                    "name",
+                    "Seçenek"
+                )[:100],
+                "value": str(index)
+            }
+
+            if isinstance(
+                parsed,
+                discord.PartialEmoji
+            ):
+
+                kwargs["emoji"] = parsed
+
+            elif parsed:
+
+                # Unicode emoji için kullan.
+                kwargs["emoji"] = parsed
+
             select_options.append(
                 discord.SelectOption(
-                    label=option["name"][:100],
-                    value=str(index),
-                    emoji=option.get("emoji") or None
+                    **kwargs
                 )
             )
 
@@ -1135,7 +1348,10 @@ class OptionDeleteSelect(discord.ui.Select):
             options=select_options
         )
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
         index = int(
             self.values[0]
@@ -1152,19 +1368,23 @@ class OptionDeleteSelect(discord.ui.Select):
             save_data()
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'option_deleted')}",
+            f"{E['yes']} "
+            f"{text(interaction.guild.id, 'option_deleted')}",
             ephemeral=True
         )
 
 # =========================================================
-# OPTION EDIT SELECT
+# SEÇENEK DÜZENLE SELECT
 # =========================================================
 
-class OptionEditSelect(discord.ui.Select):
+class OptionEditSelect(
+    discord.ui.Select
+):
 
-    def __init__(self, guild_id):
-
-        self.guild_id = guild_id
+    def __init__(
+        self,
+        guild_id
+    ):
 
         options = get_config(
             guild_id
@@ -1176,11 +1396,35 @@ class OptionEditSelect(discord.ui.Select):
             options[:25]
         ):
 
+            kwargs = {
+                "label": option.get(
+                    "name",
+                    "Seçenek"
+                )[:100],
+                "value": str(index)
+            }
+
+            parsed = parse_button_emoji(
+                option.get(
+                    "emoji",
+                    ""
+                )
+            )
+
+            if isinstance(
+                parsed,
+                discord.PartialEmoji
+            ):
+
+                kwargs["emoji"] = parsed
+
+            elif parsed:
+
+                kwargs["emoji"] = parsed
+
             select_options.append(
                 discord.SelectOption(
-                    label=option["name"][:100],
-                    value=str(index),
-                    emoji=option.get("emoji") or None
+                    **kwargs
                 )
             )
 
@@ -1192,7 +1436,10 @@ class OptionEditSelect(discord.ui.Select):
             options=select_options
         )
 
-    async def callback(self, interaction):
+    async def callback(
+        self,
+        interaction
+    ):
 
         index = int(
             self.values[0]
@@ -1212,19 +1459,24 @@ class OptionEditSelect(discord.ui.Select):
             return
 
         await interaction.response.send_modal(
-            RealEditOptionModal(
+            EditOptionModal(
                 interaction.guild.id,
                 index
             )
         )
 
 # =========================================================
-# OPTION VIEWS
+# SELECT VIEWS
 # =========================================================
 
-class OptionDeleteView(discord.ui.View):
+class OptionDeleteView(
+    discord.ui.View
+):
 
-    def __init__(self, guild_id):
+    def __init__(
+        self,
+        guild_id
+    ):
 
         super().__init__(
             timeout=120
@@ -1235,14 +1487,22 @@ class OptionDeleteView(discord.ui.View):
         )["ticket"]["options"]
 
         if options:
+
             self.add_item(
-                OptionDeleteSelect(guild_id)
+                OptionDeleteSelect(
+                    guild_id
+                )
             )
 
 
-class OptionEditView(discord.ui.View):
+class OptionEditView(
+    discord.ui.View
+):
 
-    def __init__(self, guild_id):
+    def __init__(
+        self,
+        guild_id
+    ):
 
         super().__init__(
             timeout=120
@@ -1253,15 +1513,20 @@ class OptionEditView(discord.ui.View):
         )["ticket"]["options"]
 
         if options:
+
             self.add_item(
-                OptionEditSelect(guild_id)
+                OptionEditSelect(
+                    guild_id
+                )
             )
 
 # =========================================================
-# TICKET SETTINGS VIEW
+# TICKET AYARLARI VIEW
 # =========================================================
 
-class TicketSettingsView(discord.ui.View):
+class TicketSettingsView(
+    discord.ui.View
+):
 
     def __init__(self):
 
@@ -1284,7 +1549,9 @@ class TicketSettingsView(discord.ui.View):
             interaction.guild.id
         )
 
-        config["ticket"]["enabled"] = not config["ticket"]["enabled"]
+        config["ticket"]["enabled"] = not config[
+            "ticket"
+        ]["enabled"]
 
         save_data()
 
@@ -1373,7 +1640,8 @@ class TicketSettingsView(discord.ui.View):
         )
 
         await interaction.response.send_message(
-            f"{E['settings']} {text(interaction.guild.id, 'choose_role')}",
+            f"{E['settings']} "
+            f"{text(interaction.guild.id, 'choose_role')}",
             view=view,
             ephemeral=True
         )
@@ -1400,7 +1668,8 @@ class TicketSettingsView(discord.ui.View):
         )
 
         await interaction.response.send_message(
-            f"{E['settings']} {text(interaction.guild.id, 'choose_category')}",
+            f"{E['settings']} "
+            f"{text(interaction.guild.id, 'choose_category')}",
             view=view,
             ephemeral=True
         )
@@ -1427,7 +1696,8 @@ class TicketSettingsView(discord.ui.View):
         )
 
         await interaction.response.send_message(
-            f"{E['settings']} {text(interaction.guild.id, 'choose_channel')}",
+            f"{E['settings']} "
+            f"{text(interaction.guild.id, 'choose_channel')}",
             view=view,
             ephemeral=True
         )
@@ -1551,7 +1821,9 @@ class TicketSettingsView(discord.ui.View):
             return
 
         description = "\n".join(
-            f"{o.get('emoji', '🎫')} **{o['name']}** → `{o['button']}`"
+            f"{o.get('emoji', '🎫')} "
+            f"**{o.get('name', 'Ticket')}** → "
+            f"`{o.get('button', 'Ticket')}`"
             for o in options
         )
 
@@ -1586,7 +1858,7 @@ class TicketSettingsView(discord.ui.View):
 
             return
 
-        if not ticket["role"]:
+        if not ticket.get("role"):
 
             await interaction.response.send_message(
                 f"{E['no']} Önce **Yetkili Rolü** seç.",
@@ -1595,7 +1867,7 @@ class TicketSettingsView(discord.ui.View):
 
             return
 
-        if not ticket["category"]:
+        if not ticket.get("category"):
 
             await interaction.response.send_message(
                 f"{E['no']} Önce **Kategori** seç.",
@@ -1604,7 +1876,7 @@ class TicketSettingsView(discord.ui.View):
 
             return
 
-        if not ticket["channel"]:
+        if not ticket.get("channel"):
 
             await interaction.response.send_message(
                 f"{E['no']} Önce **Panel Kanalı** seç.",
@@ -1613,10 +1885,10 @@ class TicketSettingsView(discord.ui.View):
 
             return
 
-        if not ticket["options"]:
+        if not ticket.get("options"):
 
             await interaction.response.send_message(
-                f"{E['no']} En az bir Ticket seçeneği ekle.",
+                f"{E['no']} En az bir seçenek ekle.",
                 ephemeral=True
             )
 
@@ -1649,14 +1921,16 @@ class TicketSettingsView(discord.ui.View):
         except Exception as error:
 
             await interaction.response.send_message(
-                f"{E['no']} Panel gönderilemedi.\n`{error}`",
+                f"{E['no']} Panel gönderilemedi.\n"
+                f"`{error}`",
                 ephemeral=True
             )
 
             return
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'saved')}",
+            f"{E['yes']} "
+            f"{text(interaction.guild.id, 'saved')}",
             ephemeral=True
         )
 
@@ -1707,12 +1981,17 @@ def ticket_panel_embed(guild_id):
     return embed
 
 # =========================================================
-# TICKET PANEL BUTTONS
+# TICKET PANEL VIEW
 # =========================================================
 
-class TicketPanelView(discord.ui.View):
+class TicketPanelView(
+    discord.ui.View
+):
 
-    def __init__(self, guild_id):
+    def __init__(
+        self,
+        guild_id
+    ):
 
         super().__init__(
             timeout=None
@@ -1726,11 +2005,33 @@ class TicketPanelView(discord.ui.View):
             options[:20]
         ):
 
+            emoji_value = str(
+                option.get(
+                    "emoji",
+                    ""
+                )
+            ).strip()
+
+            button_emoji = parse_button_emoji(
+                emoji_value
+            )
+
             button = discord.ui.Button(
-                label=option["button"][:80],
-                emoji=option.get("emoji") or None,
+                label=option.get(
+                    "button",
+                    option.get(
+                        "name",
+                        "Ticket"
+                    )
+                )[:80],
+
+                emoji=button_emoji,
+
                 style=discord.ButtonStyle.primary,
-                custom_id=f"dynex_ticket_option_{index}"
+
+                custom_id=(
+                    f"dynex_ticket_option_{index}"
+                )
             )
 
             async def callback(
@@ -1742,7 +2043,9 @@ class TicketPanelView(discord.ui.View):
                     interaction.guild.id
                 )["ticket"]["options"]
 
-                if selected_index >= len(current_options):
+                if selected_index >= len(
+                    current_options
+                ):
 
                     await interaction.response.send_message(
                         f"{E['no']} Bu seçenek artık mevcut değil.",
@@ -1753,7 +2056,10 @@ class TicketPanelView(discord.ui.View):
 
                 option_name = current_options[
                     selected_index
-                ]["name"]
+                ].get(
+                    "name",
+                    "Ticket"
+                )
 
                 await interaction.response.send_modal(
                     TicketRequestModal(
@@ -1771,9 +2077,14 @@ class TicketPanelView(discord.ui.View):
 # TICKET REQUEST MODAL
 # =========================================================
 
-class TicketRequestModal(discord.ui.Modal):
+class TicketRequestModal(
+    discord.ui.Modal
+):
 
-    def __init__(self, option_name):
+    def __init__(
+        self,
+        option_name
+    ):
 
         super().__init__(
             title=option_name[:45]
@@ -1793,7 +2104,10 @@ class TicketRequestModal(discord.ui.Modal):
             self.request
         )
 
-    async def on_submit(self, interaction):
+    async def on_submit(
+        self,
+        interaction
+    ):
 
         config = get_config(
             interaction.guild.id
@@ -1801,15 +2115,16 @@ class TicketRequestModal(discord.ui.Modal):
 
         ticket = config["ticket"]
 
-        category = (
-            interaction.guild.get_channel(
+        category = None
+
+        if ticket.get("category"):
+
+            category = interaction.guild.get_channel(
                 ticket["category"]
             )
-            if ticket["category"]
-            else None
-        )
 
         overwrites = {
+
             interaction.guild.default_role:
                 discord.PermissionOverwrite(
                     view_channel=False
@@ -1823,55 +2138,70 @@ class TicketRequestModal(discord.ui.Modal):
                 )
         }
 
-        role = (
-            interaction.guild.get_role(
+        role = None
+
+        if ticket.get("role"):
+
+            role = interaction.guild.get_role(
                 ticket["role"]
             )
-            if ticket["role"]
-            else None
-        )
 
         if role:
 
-            overwrites[role] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True
+            overwrites[role] = (
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                )
             )
 
         if interaction.guild.me:
 
-            overwrites[interaction.guild.me] = discord.PermissionOverwrite(
+            overwrites[
+                interaction.guild.me
+            ] = discord.PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
                 read_message_history=True,
-                manage_channels=True
+                manage_channels=True,
+                manage_messages=True
             )
 
-        safe_name = re.sub(
+        safe_option = re.sub(
             r"[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]",
             "-",
             self.option_name.lower()
         )
 
-        safe_name = safe_name[:25].strip("-")
+        safe_option = safe_option[
+            :25
+        ].strip("-")
 
-        username = re.sub(
-            r"[^a-zA-Z0-9_-]",
+        safe_username = re.sub(
+            r"[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]",
             "-",
             interaction.user.name.lower()
-        )[:25]
+        )
+
+        safe_username = safe_username[
+            :25
+        ].strip("-")
+
+        if not safe_username:
+            safe_username = "kullanici"
+
+        if not safe_option:
+            safe_option = "ticket"
 
         channel_name = (
-            f"{safe_name}-{username}"
-            if safe_name
-            else f"ticket-{username}"
-        )
+            f"{safe_option}-{safe_username}"
+        )[:95]
 
         try:
 
             channel = await interaction.guild.create_text_channel(
-                channel_name[:95],
+                channel_name,
                 category=category,
                 overwrites=overwrites
             )
@@ -1879,18 +2209,23 @@ class TicketRequestModal(discord.ui.Modal):
         except Exception as error:
 
             await interaction.response.send_message(
-                f"{E['no']} Ticket oluşturulamadı.\n`{error}`",
+                f"{E['no']} Ticket oluşturulamadı.\n"
+                f"`{error}`",
                 ephemeral=True
             )
 
             return
 
         embed = discord.Embed(
-            title=f"{E['locked']} {self.option_name}",
+            title=(
+                f"{E['locked']} "
+                f"{self.option_name}"
+            ),
             description=(
                 f"**{text(interaction.guild.id, 'problem')}:**\n"
                 f"{self.request.value}\n\n"
-                f"**Kullanıcı:** {interaction.user.mention}"
+                f"**Kullanıcı:** "
+                f"{interaction.user.mention}"
             ),
             color=discord.Color.blurple()
         )
@@ -1901,7 +2236,9 @@ class TicketRequestModal(discord.ui.Modal):
         )
 
         await interaction.response.send_message(
-            f"{E['yes']} {text(interaction.guild.id, 'ticket_created')} {channel.mention}",
+            f"{E['yes']} "
+            f"{text(interaction.guild.id, 'ticket_created')} "
+            f"{channel.mention}",
             ephemeral=True
         )
 
@@ -1909,7 +2246,9 @@ class TicketRequestModal(discord.ui.Modal):
 # TICKET CLOSE
 # =========================================================
 
-class TicketCloseView(discord.ui.View):
+class TicketCloseView(
+    discord.ui.View
+):
 
     def __init__(self):
 
@@ -1932,10 +2271,13 @@ class TicketCloseView(discord.ui.View):
             f"{E['locked']} Ticket kapatılıyor..."
         )
 
-        await interaction.channel.delete()
+        try:
+            await interaction.channel.delete()
+        except Exception:
+            pass
 
 # =========================================================
-# OTHER SETTINGS
+# DİĞER AYARLAR
 # =========================================================
 
 def other_settings_embed(
@@ -1955,16 +2297,23 @@ def other_settings_embed(
     }
 
     embed = discord.Embed(
-        title=f"{E['settings']} {text(guild_id, titles[section])}",
+        title=(
+            f"{E['settings']} "
+            f"{text(guild_id, titles[section])}"
+        ),
         color=discord.Color.blurple()
     )
 
     embed.add_field(
-        name=text(guild_id, section),
+        name=text(
+            guild_id,
+            section
+        ),
         value=enabled_text(
             guild_id,
             config[section]["enabled"]
-        )
+        ),
+        inline=False
     )
 
     if section in [
@@ -1976,15 +2325,19 @@ def other_settings_embed(
             name="Kanal",
             value=(
                 f"<#{config[section]['channel']}>"
-                if config[section]["channel"]
+                if config[section].get("channel")
                 else "—"
-            )
+            ),
+            inline=False
         )
 
     if section == "welcome":
 
         embed.add_field(
-            name=text(guild_id, "welcome_message"),
+            name=text(
+                guild_id,
+                "welcome_message"
+            ),
             value=config["welcome"]["message"],
             inline=False
         )
@@ -1995,20 +2348,26 @@ def other_settings_embed(
             name="Rol",
             value=(
                 f"<@&{config['autorole']['role']}>"
-                if config["autorole"]["role"]
+                if config["autorole"].get("role")
                 else "—"
-            )
+            ),
+            inline=False
         )
 
     return embed
 
 # =========================================================
-# SIMPLE SETTINGS VIEW
+# SIMPLE SETTINGS
 # =========================================================
 
-class SimpleSettingsView(discord.ui.View):
+class SimpleSettingsView(
+    discord.ui.View
+):
 
-    def __init__(self, section):
+    def __init__(
+        self,
+        section
+    ):
 
         super().__init__(
             timeout=600
@@ -2030,7 +2389,9 @@ class SimpleSettingsView(discord.ui.View):
             interaction.guild.id
         )
 
-        config[self.section]["enabled"] = not config[
+        config[
+            self.section
+        ]["enabled"] = not config[
             self.section
         ]["enabled"]
 
@@ -2041,7 +2402,9 @@ class SimpleSettingsView(discord.ui.View):
                 interaction.guild.id,
                 self.section
             ),
-            view=self
+            view=SimpleSettingsView(
+                self.section
+            )
         )
 
     @discord.ui.button(
@@ -2063,10 +2426,12 @@ class SimpleSettingsView(discord.ui.View):
         )
 
 # =========================================================
-# MAIN SETTINGS VIEW
+# ANA AYARLAR VIEW
 # =========================================================
 
-class SettingsView(discord.ui.View):
+class SettingsView(
+    discord.ui.View
+):
 
     def __init__(self):
 
@@ -2205,9 +2570,9 @@ class SettingsView(discord.ui.View):
         button
     ):
 
-        configs[str(
-            interaction.guild.id
-        )] = copy.deepcopy(
+        configs[
+            str(interaction.guild.id)
+        ] = copy.deepcopy(
             DEFAULT
         )
 
@@ -2231,7 +2596,9 @@ class SettingsView(discord.ui.View):
 @app_commands.checks.has_permissions(
     administrator=True
 )
-async def ayarlar(interaction):
+async def ayarlar(
+    interaction: discord.Interaction
+):
 
     await interaction.response.send_message(
         embed=settings_embed(
@@ -2251,24 +2618,32 @@ async def ayarlar_error(
     if not interaction.response.is_done():
 
         await interaction.response.send_message(
-            f"{E['no']} {text(interaction.guild.id, 'permission')}",
+            f"{E['no']} "
+            f"{text(interaction.guild.id, 'permission')}",
             ephemeral=True
         )
 
 # =========================================================
-# WELCOME + AUTOROLE
+# MEMBER JOIN
 # =========================================================
 
 @bot.event
-async def on_member_join(member):
+async def on_member_join(
+    member
+):
 
     config = get_config(
         member.guild.id
     )
 
+    # AUTOROLE
+
     autorole = config["autorole"]
 
-    if autorole["enabled"] and autorole["role"]:
+    if (
+        autorole.get("enabled")
+        and autorole.get("role")
+    ):
 
         role = member.guild.get_role(
             autorole["role"]
@@ -2277,15 +2652,26 @@ async def on_member_join(member):
         if role:
 
             try:
+
                 await member.add_roles(
                     role
                 )
-            except Exception:
-                pass
+
+            except Exception as error:
+
+                print(
+                    "Autorole hatası:",
+                    error
+                )
+
+    # WELCOME
 
     welcome = config["welcome"]
 
-    if welcome["enabled"] and welcome["channel"]:
+    if (
+        welcome.get("enabled")
+        and welcome.get("channel")
+    ):
 
         channel = member.guild.get_channel(
             welcome["channel"]
@@ -2295,7 +2681,9 @@ async def on_member_join(member):
 
             try:
 
-                message = welcome["message"].replace(
+                message = welcome[
+                    "message"
+                ].replace(
                     "{member}",
                     member.mention
                 )
@@ -2304,8 +2692,12 @@ async def on_member_join(member):
                     message
                 )
 
-            except Exception:
-                pass
+            except Exception as error:
+
+                print(
+                    "Welcome hatası:",
+                    error
+                )
 
 # =========================================================
 # READY
@@ -2318,10 +2710,17 @@ async def on_ready():
         f"{bot.user} aktif."
     )
 
+    print(
+        f"Sunucu sayısı: {len(bot.guilds)}"
+    )
+
+    # Ticket kapatma butonunu restart sonrası da çalıştır.
     try:
+
         bot.add_view(
             TicketCloseView()
         )
+
     except Exception:
         pass
 
@@ -2332,8 +2731,11 @@ async def on_ready():
 load_data()
 
 if not TOKEN:
+
     raise RuntimeError(
         "DISCORD_TOKEN environment variable bulunamadı."
     )
 
-bot.run(TOKEN)
+bot.run(
+    TOKEN
+)
