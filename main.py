@@ -565,4 +565,3 @@ TEXTS = {
         "ping_title": "Dynex Ping 状態",
         "ping_description": "**Dynex** の Ping 状態",
         "voice_title": "ボイスチャンネル統計",
-        "
