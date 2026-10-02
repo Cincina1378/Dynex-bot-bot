@@ -49,20 +49,10 @@ DEFAULT_CONFIG = {
         "title": "Destek Talebi",
         "description": "Aşağıdaki seçeneklerden uygun olanı seçerek ticket oluşturabilirsin.",
         "image_url": None,
-        "options": [
-            {
-                "id": "destek",
-                "name": "Destek",
-                "button": "Destek",
-                "emoji": "🎫"
-            },
-            {
-                "id": "sikayet",
-                "name": "Şikayet",
-                "button": "Şikayet",
-                "emoji": "📝"
-            }
-        ]
+
+        # ÖNEMLİ:
+        # Hazır ticket seçeneği YOK.
+        "options": []
     },
 
     "welcome": {
@@ -118,7 +108,7 @@ DEFAULT_CONFIG = {
 
 
 # =========================================================
-# CONFIG FUNCTIONS
+# CONFIG
 # =========================================================
 
 def copy_data(data):
@@ -153,6 +143,7 @@ ALL_CONFIG = load_configs()
 
 
 def merge_dict(default, current):
+
     if not isinstance(default, dict):
         return current
 
@@ -170,6 +161,7 @@ def merge_dict(default, current):
                     value,
                     current[key]
                 )
+
             else:
                 result[key] = current[key]
 
@@ -185,6 +177,7 @@ def merge_dict(default, current):
 
 
 def save_config():
+
     CONFIG_FILE.write_text(
         json.dumps(
             ALL_CONFIG,
@@ -196,13 +189,17 @@ def save_config():
 
 
 def get_config(guild_id):
+
     key = str(guild_id)
 
     if key not in ALL_CONFIG:
+
         ALL_CONFIG[key] = copy_data(
             DEFAULT_CONFIG
         )
+
     else:
+
         ALL_CONFIG[key] = merge_dict(
             DEFAULT_CONFIG,
             ALL_CONFIG[key]
@@ -249,6 +246,7 @@ def parse_emoji(value, guild):
     if value.startswith("<:") or value.startswith("<a:"):
 
         try:
+
             emoji = discord.PartialEmoji.from_str(
                 value
             )
@@ -257,6 +255,7 @@ def parse_emoji(value, guild):
                 return emoji
 
         except Exception:
+
             return None
 
     # :isim:
@@ -269,9 +268,12 @@ def parse_emoji(value, guild):
             name=name
         )
 
-        return emoji
+        if emoji:
+            return emoji
 
-    # Unicode
+        return None
+
+    # Unicode emoji
     return value
 
 
@@ -282,18 +284,24 @@ def emoji_exists(value, guild):
 
     value = str(value).strip()
 
+    # :isim:
     if value.startswith(":") and value.endswith(":"):
 
         name = value[1:-1].strip()
 
-        return discord.utils.get(
-            guild.emojis,
-            name=name
-        ) is not None
+        return (
+            discord.utils.get(
+                guild.emojis,
+                name=name
+            )
+            is not None
+        )
 
+    # <:isim:id> / <a:isim:id>
     if value.startswith("<:") or value.startswith("<a:"):
 
         try:
+
             emoji = discord.PartialEmoji.from_str(
                 value
             )
@@ -301,8 +309,10 @@ def emoji_exists(value, guild):
             return emoji.id is not None
 
         except Exception:
+
             return False
 
+    # Unicode
     return True
 
 
@@ -328,16 +338,21 @@ def get_text_channel(
         return None
 
     try:
+
         return guild.get_channel(
             int(channel_id)
         )
+
     except Exception:
+
         return None
 
 
 async def send_log(guild, embed):
 
-    config = get_config(guild.id)
+    config = get_config(
+        guild.id
+    )
 
     channel = get_text_channel(
         guild,
@@ -347,10 +362,13 @@ async def send_log(guild, embed):
     if channel:
 
         try:
+
             await channel.send(
                 embed=embed
             )
+
         except Exception:
+
             pass
 
 
@@ -382,15 +400,11 @@ LANGUAGES = {
 }
 
 
-# =========================================================
-# LANGUAGE SELECT
-# =========================================================
-
 class LanguageSelect(discord.ui.Select):
 
     def __init__(self):
 
-        options = []
+        options = [
             discord.SelectOption(
                 label="Türkçe",
                 value="tr"
@@ -471,7 +485,7 @@ async def dil(
 
 
 # =========================================================
-# TICKET ADD MODAL
+# TICKET ADD
 # =========================================================
 
 class TicketAddModal(
@@ -481,14 +495,14 @@ class TicketAddModal(
 
     name_input = discord.ui.TextInput(
         label="Seçenek adı",
-        placeholder="Destek",
+        placeholder="Örneğin: Teknik Destek",
         required=True,
         max_length=50
     )
 
     button_input = discord.ui.TextInput(
         label="Buton yazısı",
-        placeholder="Destek",
+        placeholder="Örneğin: Teknik Destek",
         required=True,
         max_length=50
     )
@@ -548,7 +562,7 @@ class TicketAddModal(
 
 
 # =========================================================
-# TICKET EDIT MODAL
+# TICKET EDIT
 # =========================================================
 
 class TicketEditModal(
@@ -605,7 +619,10 @@ class TicketEditModal(
     async def on_submit(self, interaction):
 
         guild = interaction.guild
-        config = get_config(guild.id)
+
+        config = get_config(
+            guild.id
+        )
 
         emoji_value = str(
             self.emoji_input.value
@@ -867,7 +884,7 @@ class TicketEditView(
 
 
 # =========================================================
-# TICKET PANEL SETTINGS MODAL
+# TICKET PANEL SETTINGS
 # =========================================================
 
 class TicketSettingsModal(
@@ -927,7 +944,7 @@ class TicketSettingsModal(
 
 
 # =========================================================
-# TICKET CATEGORY SELECT
+# TICKET CATEGORY
 # =========================================================
 
 class TicketCategorySelect(
@@ -983,7 +1000,7 @@ class TicketCategoryView(
 
 
 # =========================================================
-# TICKET ROLE SELECT
+# TICKET ROLE
 # =========================================================
 
 class TicketRoleSelect(
@@ -1147,10 +1164,13 @@ class TicketCloseView(
         await asyncio.sleep(2)
 
         try:
+
             await channel.delete(
                 reason="Dynex ticket kapatıldı"
             )
+
         except Exception:
+
             pass
 
 
@@ -1250,7 +1270,6 @@ async def create_ticket(
 
         return
 
-    # Aynı kullanıcının ticketı
     for channel in guild.text_channels:
 
         if channel.topic == (
@@ -1280,6 +1299,7 @@ async def create_ticket(
             )
 
         except Exception:
+
             category = None
 
     overwrites = {
@@ -1310,6 +1330,7 @@ async def create_ticket(
             )
 
         except Exception:
+
             role = None
 
     if role:
@@ -1385,7 +1406,7 @@ async def create_ticket(
 
 
 # =========================================================
-# TICKET OPTIONS VIEW
+# TICKET OPTIONS
 # =========================================================
 
 class TicketOptionsView(
@@ -1460,6 +1481,19 @@ async def send_ticket_panel(
     config = get_config(
         interaction.guild.id
     )
+
+    # Hazır seçenek yoksa panel gönderme
+    if not config["ticket"]["options"]:
+
+        await interaction.response.send_message(
+            (
+                f"{EMOJIS['no']} Önce **Seçenekler → Seçenek Ekle** "
+                "ile en az bir ticket seçeneği oluştur."
+            ),
+            ephemeral=True
+        )
+
+        return
 
     channel = get_text_channel(
         interaction.guild,
@@ -2149,7 +2183,7 @@ class SettingsView(
         await interaction.response.edit_message(
             content=None,
             embed=make_embed(
-                "👋 Hoş Geldin Ayarları",
+                f"{EMOJIS['server']} Hoş Geldin Ayarları",
                 "Hoş geldin sistemini buradan yönet."
             ),
             view=WelcomeSettingsView()
@@ -2169,7 +2203,7 @@ class SettingsView(
         await interaction.response.edit_message(
             content=None,
             embed=make_embed(
-                "👤 Otorol Ayarları",
+                f"{EMOJIS['correct']} Otorol Ayarları",
                 "Yeni üyelerin alacağı rolü seç."
             ),
             view=AutoroleSettingsView()
@@ -2189,7 +2223,7 @@ class SettingsView(
         await interaction.response.edit_message(
             content=None,
             embed=make_embed(
-                "🛡️ Moderasyon Ayarları",
+                f"{EMOJIS['locked']} Moderasyon Ayarları",
                 "Moderasyon sistemini buradan yönet."
             ),
             view=ModerationSettingsView()
@@ -2209,7 +2243,7 @@ class SettingsView(
         await interaction.response.edit_message(
             content=None,
             embed=make_embed(
-                "📜 Log Ayarları",
+                f"{EMOJIS['about']} Log Ayarları",
                 "Log sistemini buradan yönet."
             ),
             view=LogsSettingsView()
@@ -2229,7 +2263,7 @@ class SettingsView(
         await interaction.response.edit_message(
             content=None,
             embed=make_embed(
-                "🔊 Ses Ayarları",
+                f"{EMOJIS['discord']} Ses Ayarları",
                 "Ses bildirimlerini buradan yönet."
             ),
             view=VoiceSettingsView()
@@ -2285,7 +2319,7 @@ class SettingsView(
 
 
 # =========================================================
-# TICKET SETTINGS VIEW
+# TICKET SETTINGS
 # =========================================================
 
 class TicketSettingsView(
@@ -2418,7 +2452,7 @@ class TicketSettingsView(
 
 
 # =========================================================
-# WELCOME SETTINGS VIEW
+# WELCOME SETTINGS
 # =========================================================
 
 class WelcomeSettingsView(
@@ -2485,7 +2519,7 @@ class WelcomeSettingsView(
 
 
 # =========================================================
-# AUTOROLE SETTINGS VIEW
+# AUTOROLE SETTINGS
 # =========================================================
 
 class AutoroleSettingsView(
@@ -2535,7 +2569,7 @@ class AutoroleSettingsView(
 
 
 # =========================================================
-# MODERATION SETTINGS VIEW
+# MODERATION SETTINGS
 # =========================================================
 
 class ModerationSettingsView(
@@ -2602,7 +2636,7 @@ class ModerationSettingsView(
 
 
 # =========================================================
-# LOG SETTINGS VIEW
+# LOG SETTINGS
 # =========================================================
 
 class LogsSettingsView(
@@ -2669,7 +2703,7 @@ class LogsSettingsView(
 
 
 # =========================================================
-# VOICE SETTINGS VIEW
+# VOICE SETTINGS
 # =========================================================
 
 class VoiceSettingsView(
@@ -2790,12 +2824,16 @@ async def ping(
 
     if latency < 80:
         status = "Mükemmel"
+
     elif latency < 150:
         status = "İyi"
+
     elif latency < 250:
         status = "Orta"
+
     elif latency < 400:
         status = "Zayıf"
+
     else:
         status = "Berbat"
 
@@ -2861,7 +2899,7 @@ async def ban(
             await send_log(
                 interaction.guild,
                 make_embed(
-                    "🔨 Ban",
+                    "Ban",
                     (
                         f"**Kullanıcı:** {member.mention}\n"
                         f"**Yetkili:** {interaction.user.mention}\n"
@@ -2919,7 +2957,7 @@ async def kick(
             await send_log(
                 interaction.guild,
                 make_embed(
-                    "👢 Kick",
+                    "Kick",
                     (
                         f"**Kullanıcı:** {member.mention}\n"
                         f"**Yetkili:** {interaction.user.mention}\n"
@@ -3006,7 +3044,7 @@ async def timeout(
             await send_log(
                 interaction.guild,
                 make_embed(
-                    "🔇 Timeout",
+                    "Timeout",
                     (
                         f"**Kullanıcı:** {member.mention}\n"
                         f"**Yetkili:** {interaction.user.mention}\n"
@@ -3025,7 +3063,7 @@ async def timeout(
 
 
 # =========================================================
-# MESSAGE EVENT
+# MESSAGE
 # =========================================================
 
 @bot.event
@@ -3158,7 +3196,7 @@ async def on_message_delete(message):
     await send_log(
         message.guild,
         make_embed(
-            "🗑️ Mesaj Silindi",
+            "Mesaj Silindi",
             (
                 f"**Kullanıcı:** {message.author.mention}\n"
                 f"**Kanal:** {message.channel.mention}\n"
@@ -3201,7 +3239,7 @@ async def on_message_edit(
     await send_log(
         before.guild,
         make_embed(
-            "✏️ Mesaj Düzenlendi",
+            "Mesaj Düzenlendi",
             (
                 f"**Kullanıcı:** {before.author.mention}\n"
                 f"**Kanal:** {before.channel.mention}\n\n"
@@ -3238,12 +3276,14 @@ async def on_member_join(member):
             )
 
             if role:
+
                 await member.add_roles(
                     role,
                     reason="Dynex Otorol"
                 )
 
         except Exception:
+
             pass
 
     # WELCOME
@@ -3295,6 +3335,7 @@ async def on_member_join(member):
         if welcome.get(
             "show_member"
         ):
+
             extra.append(
                 f"**Üye:** {member.mention}"
             )
@@ -3302,6 +3343,7 @@ async def on_member_join(member):
         if welcome.get(
             "show_username"
         ):
+
             extra.append(
                 f"**Kullanıcı:** `{member.name}`"
             )
@@ -3309,6 +3351,7 @@ async def on_member_join(member):
         if welcome.get(
             "show_id"
         ):
+
             extra.append(
                 f"**ID:** `{member.id}`"
             )
@@ -3316,6 +3359,7 @@ async def on_member_join(member):
         if welcome.get(
             "show_server"
         ):
+
             extra.append(
                 f"**Sunucu:** `{member.guild.name}`"
             )
@@ -3323,6 +3367,7 @@ async def on_member_join(member):
         if welcome.get(
             "show_member_count"
         ):
+
             extra.append(
                 (
                     f"**Üye sayısı:** "
@@ -3352,6 +3397,7 @@ async def on_member_join(member):
             )
 
         except Exception:
+
             pass
 
     # JOIN LOG
@@ -3363,7 +3409,7 @@ async def on_member_join(member):
         await send_log(
             member.guild,
             make_embed(
-                "📥 Üye Katıldı",
+                "Üye Katıldı",
                 (
                     f"**Kullanıcı:** {member.mention}\n"
                     f"**ID:** `{member.id}`"
@@ -3390,6 +3436,7 @@ async def on_member_join(member):
             )
 
         except Exception:
+
             pass
 
 
@@ -3413,7 +3460,7 @@ async def on_member_remove(member):
     await send_log(
         member.guild,
         make_embed(
-            "📤 Üye Ayrıldı",
+            "Üye Ayrıldı",
             (
                 f"**Kullanıcı:** `{member}`\n"
                 f"**ID:** `{member.id}`"
@@ -3462,11 +3509,12 @@ async def on_voice_state_update(
         try:
 
             await channel.send(
-                f"🔊 {message}\n"
+                f"{EMOJIS['discord']} {message}\n"
                 f"**Kanal:** {after.channel.mention}"
             )
 
         except Exception:
+
             pass
 
     elif (
@@ -3485,11 +3533,12 @@ async def on_voice_state_update(
         try:
 
             await channel.send(
-                f"🔊 {message}\n"
+                f"{EMOJIS['discord']} {message}\n"
                 f"**Kanal:** {before.channel.mention}"
             )
 
         except Exception:
+
             pass
 
 
