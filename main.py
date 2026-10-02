@@ -4015,4 +4015,45 @@ async def command_error(
 # BAŞLAT
 # =========================================================
 
+@bot.tree.command(
+    name="sil",
+    description="Belirtilen miktarda mesajı siler."
+)
+@app_commands.describe(
+    miktar="Silinecek mesaj sayısı (1-100)."
+)
+async def sil(
+    interaction: discord.Interaction,
+    miktar: app_commands.Range[int, 1, 100]
+):
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Mesajları silme yetkin yok.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(
+        ephemeral=True
+    )
+
+    try:
+        deleted = await interaction.channel.purge(
+            limit=miktar
+        )
+
+        await interaction.followup.send(
+            f"{EMOJIS['yes']} `{len(deleted)}` mesaj silindi.",
+            ephemeral=True
+        )
+
+    except Exception as e:
+        print("/sil hatası:", repr(e))
+
+        await interaction.followup.send(
+            f"{EMOJIS['no']} Mesajlar silinemedi.",
+            ephemeral=True
+        )
+
+
 bot.run(TOKEN)
