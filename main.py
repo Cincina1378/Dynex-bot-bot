@@ -645,7 +645,6 @@ async def dil(interaction: discord.Interaction):
 # =========================================================
 # /BOT
 # =========================================================
-
 @bot.tree.command(
     name="bot",
     description="Dynex botunun mevcut durumunu gösterir."
@@ -682,13 +681,12 @@ async def bot_status(interaction: discord.Interaction):
 
         embed = discord.Embed(
             title="Dynex Durum",
-            color=discord.Color.black()
+            color=discord.Color.from_rgb(0, 0, 0)
         )
 
         embed.description = (
             f"**Sunucu sayısı:** `{guild_count}`\n\n"
-            f"**Destek sunucusu üye sayısı:** "
-            f"`{support_member_count}`\n\n"
+            f"**Destek sunucusu üye sayısı:** `{support_member_count}`\n\n"
             f"**Prefix yani . Komut:** `D.`\n\n"
             f"**Aktif kalma süresi:** `{uptime_text()}`\n\n"
             f"**Bot sahibi:** {owner_text}"
