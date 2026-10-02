@@ -2523,76 +2523,70 @@ async def language_command(
 # =========================================================
 # /BOT
 # =========================================================
-
 @bot.tree.command(
     name="bot",
-    description="Dynex botunun mevcut durumunu gösterir."
+    description="Dynex botunun durumunu gösterir."
 )
-async def bot_status(
-    interaction: discord.Interaction
-):
-
-    # Bot sahibi
+async def bot_status(interaction: discord.Interaction):
     try:
-        app = await bot.application_info()
-        owner = app.owner
+        embed = discord.Embed(
+            title="Dynex Durum",
+            color=discord.Color.black()
+        )
 
-        if owner:
-            owner_text = owner.mention
-        else:
+        # Bot sahibi
+        try:
+            app_info = await bot.application_info()
+            owner = app_info.owner
+            owner_text = owner.mention if owner else "Bilinmiyor"
+        except Exception as e:
+            print("Bot sahibi hatası:", repr(e))
             owner_text = "Bilinmiyor"
 
+        # Destek sunucusu
+        try:
+            support_guild = bot.get_guild(1551647711332139098)
+
+            if support_guild is not None:
+                support_members = support_guild.member_count
+                if support_members is None:
+                    support_members = len(support_guild.members)
+            else:
+                support_members = "Bilinmiyor"
+        except Exception as e:
+            print("Destek sunucusu hatası:", repr(e))
+            support_members = "Bilinmiyor"
+
+        # Aktif kalma süresi
+        try:
+            uptime = uptime_text()
+        except Exception as e:
+            print("Uptime hatası:", repr(e))
+            uptime = "Bilinmiyor"
+
+        embed.description = (
+            f"**Sunucu sayısı:** `{len(bot.guilds)}`\n\n"
+            f"**Destek sunucusu üye sayısı:** `{support_members}`\n\n"
+            f"**Prefix yani . Komut:** `D.`\n\n"
+            f"**Aktif kalma süresi:** `{uptime}`\n\n"
+            f"**Bot sahibi:** {owner_text}"
+        )
+
+        await interaction.response.send_message(embed=embed)
+
     except Exception as e:
-        print(
-            "Bot sahibi alınamadı:",
-            repr(e)
-        )
+        print("/bot KOMUT HATASI:", repr(e))
 
-        owner_text = "Bilinmiyor"
-
-    # Destek sunucusu
-    try:
-        support = bot.get_guild(
-            SUPPORT_SERVER_ID
-        )
-
-        if support:
-            member_count = (
-                support.member_count
-                if support.member_count is not None
-                else len(support.members)
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "❌ Bot durumu gösterilirken bir hata oluştu.",
+                ephemeral=True
             )
         else:
-            member_count = "Bilinmiyor"
-
-    except Exception as e:
-        print(
-            "Destek sunucusu hatası:",
-            repr(e)
-        )
-
-        member_count = "Bilinmiyor"
-
-    # Embed
-    embed = discord.Embed(
-        title="Dynex Durum",
-        color=discord.Color.black()
-    )
-
-    embed.description = (
-        f"**Sunucu sayısı:** `{len(bot.guilds)}`\n\n"
-        f"**Destek sunucusu üye sayısı:** "
-        f"`{member_count}`\n\n"
-        f"**Prefix yani . Komut:** `{PREFIX}`\n\n"
-        f"**Aktif kalma süresi:** "
-        f"`{uptime_text()}`\n\n"
-        f"**Bot sahibi:** {owner_text}"
-    )
-
-    await interaction.response.send_message(
-        embed=embed
-    )
-
+            await interaction.followup.send(
+                "❌ Bot durumu gösterilirken bir hata oluştu.",
+                ephemeral=True
+            )
 
 # =========================================================
 # /YARDIM
