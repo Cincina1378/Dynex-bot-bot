@@ -1,8 +1,7 @@
 import os
 import json
-import secrets
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import discord
@@ -11,10 +10,21 @@ from discord.ext import commands
 
 
 # =========================================================
-# DYNEX
+# TEMEL AYARLAR
 # =========================================================
 
+TOKEN = os.getenv("DISCORD_TOKEN")
 CONFIG_FILE = Path("config.json")
+
+PREFIX = "D."
+SUPPORT_SERVER_ID = 1551647711332139098
+
+START_TIME = datetime.now(timezone.utc)
+
+
+# =========================================================
+# EMOJİLER
+# =========================================================
 
 EMOJIS = {
     "dynex": "<:Dynex:1555263060350996510>",
@@ -36,49 +46,48 @@ EMOJIS = {
 
 
 # =========================================================
-# DEFAULT CONFIG
+# VARSAYILAN AYARLAR
 # =========================================================
 
 DEFAULT_CONFIG = {
     "language": "tr",
 
     "ticket": {
-        "category": None,
-        "role": None,
-        "channel": None,
-        "title": "Destek Talebi",
-        "description": "Aşağıdaki seçeneklerden uygun olanı seçerek ticket oluşturabilirsin.",
-        "image_url": None,
-
-        # ÖNEMLİ:
-        # Hazır ticket seçeneği YOK.
+        "category_id": None,
+        "role_id": None,
+        "panel_channel_id": None,
+        "panel_title": "Destek Talebi",
+        "panel_description": "Destek almak için aşağıdaki seçeneklerden birini seç.",
+        "panel_image": "",
         "options": []
     },
 
     "welcome": {
-        "channel": None,
-        "message": "Sunucumuza hoş geldin {member}!",
+        "channel_id": None,
         "title": "Hoş Geldin!",
-        "description": "{member} sunucumuza katıldı.",
-        "color": 5793266,
-        "image_url": None,
-        "thumbnail_url": None,
-        "show_member": True,
-        "show_username": True,
-        "show_id": False,
-        "show_server": True,
-        "show_member_count": True,
-        "show_join_number": False,
+        "description": "{user}, sunucumuza hoş geldin!",
+        "image": "",
+        "thumbnail": "",
         "dm_enabled": False,
-        "dm_message": "Sunucumuza hoş geldin!"
+        "dm_message": ""
     },
 
     "autorole": {
-        "role": None
+        "role_id": None
+    },
+
+    "moderation": {
+        "bad_words": [],
+        "max_warnings": 3,
+        "warning_action": "timeout",
+        "timeout_minutes": 10,
+        "anti_link": False,
+        "anti_spam": False,
+        "log_channel_id": None
     },
 
     "logs": {
-        "channel": None,
+        "channel_id": None,
         "message_delete": True,
         "message_edit": True,
         "member_join": True,
@@ -88,288 +97,246 @@ DEFAULT_CONFIG = {
         "timeout": True
     },
 
-    "moderation": {
-        "channel": None,
-        "bad_words": [],
-        "max_warnings": 3,
-        "warning_action": "timeout",
-        "timeout_minutes": 10,
-        "delete_after": True,
-        "anti_link": False,
-        "anti_spam": False
+    "voice": {
+        "channel_id": None,
+        "join_message": "{user} ses kanalına katıldı.",
+        "leave_message": "{user} ses kanalından ayrıldı."
     },
 
-    "voice": {
-        "channel": None,
-        "join_message": "{member} ses kanalına katıldı.",
-        "leave_message": "{member} ses kanalından ayrıldı."
-    }
+    "giveaway": {
+        "staff_role_id": None,
+        "channel_id": None,
+        "log_channel_id": None,
+        "default_winners": 1,
+        "default_duration": 10
+    },
+
+    "warnings": {}
 }
 
 
 # =========================================================
-# CONFIG
+# CONFIG SİSTEMİ
 # =========================================================
-
-def copy_data(data):
-    return json.loads(json.dumps(data))
-
 
 def load_configs():
     if not CONFIG_FILE.exists():
-        CONFIG_FILE.write_text(
-            "{}",
-            encoding="utf-8"
-        )
         return {}
 
     try:
-        data = json.loads(
-            CONFIG_FILE.read_text(
-                encoding="utf-8"
-            )
-        )
-
-        if isinstance(data, dict):
-            return data
-
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
-        pass
-
-    return {}
+        return {}
 
 
-ALL_CONFIG = load_configs()
+configs = load_configs()
 
 
-def merge_dict(default, current):
+def deep_copy_default():
+    return json.loads(json.dumps(DEFAULT_CONFIG))
 
-    if not isinstance(default, dict):
-        return current
 
-    if not isinstance(current, dict):
-        return copy_data(default)
+def merge_config(old, default):
+    if isinstance(default, dict):
+        result = {}
 
-    result = {}
-
-    for key, value in default.items():
-
-        if key in current:
-
-            if isinstance(value, dict):
-                result[key] = merge_dict(
-                    value,
-                    current[key]
-                )
-
+        for key, value in default.items():
+            if key in old:
+                result[key] = merge_config(old[key], value)
             else:
-                result[key] = current[key]
+                result[key] = deep_copy_value(value)
 
-        else:
-            result[key] = copy_data(value)
+        for key, value in old.items():
+            if key not in result:
+                result[key] = value
 
-    for key, value in current.items():
+        return result
 
-        if key not in result:
-            result[key] = value
-
-    return result
+    return old if old is not None else deep_copy_value(default)
 
 
-def save_config():
+def deep_copy_value(value):
+    return json.loads(json.dumps(value))
 
-    CONFIG_FILE.write_text(
-        json.dumps(
-            ALL_CONFIG,
-            ensure_ascii=False,
-            indent=4
-        ),
-        encoding="utf-8"
-    )
+
+def save_configs():
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(configs, f, ensure_ascii=False, indent=4)
 
 
 def get_config(guild_id):
+    gid = str(guild_id)
 
-    key = str(guild_id)
-
-    if key not in ALL_CONFIG:
-
-        ALL_CONFIG[key] = copy_data(
-            DEFAULT_CONFIG
-        )
-
+    if gid not in configs:
+        configs[gid] = deep_copy_default()
+        save_configs()
     else:
+        configs[gid] = merge_config(configs[gid], DEFAULT_CONFIG)
 
-        ALL_CONFIG[key] = merge_dict(
-            DEFAULT_CONFIG,
-            ALL_CONFIG[key]
-        )
+    # Eski sürümdeki hazır ticket seçeneklerini temizle.
+    old_options = configs[gid]["ticket"].get("options", [])
 
-    save_config()
+    if len(old_options) == 2:
+        names = {
+            str(x.get("name", "")).lower()
+            for x in old_options
+            if isinstance(x, dict)
+        }
 
-    return ALL_CONFIG[key]
+        if names == {"destek", "şikayet"}:
+            configs[gid]["ticket"]["options"] = []
+            save_configs()
+
+    return configs[gid]
 
 
 # =========================================================
-# HELPERS
+# EMOJİ
 # =========================================================
-
-def replace_variables(text, member):
-
-    if not text:
-        return ""
-
-    guild = member.guild
-
-    return (
-        str(text)
-        .replace("{member}", member.mention)
-        .replace("{username}", member.name)
-        .replace("{displayname}", member.display_name)
-        .replace("{id}", str(member.id))
-        .replace("{server}", guild.name)
-        .replace(
-            "{member_count}",
-            str(guild.member_count or 0)
-        )
-    )
-
 
 def parse_emoji(value, guild):
-
     if not value:
         return None
 
     value = str(value).strip()
 
-    # <:isim:id>
     if value.startswith("<:") or value.startswith("<a:"):
-
         try:
-
-            emoji = discord.PartialEmoji.from_str(
-                value
-            )
+            emoji = discord.PartialEmoji.from_str(value)
 
             if emoji.id:
                 return emoji
-
         except Exception:
-
             return None
 
-    # :isim:
     if value.startswith(":") and value.endswith(":"):
-
         name = value[1:-1].strip()
-
-        emoji = discord.utils.get(
-            guild.emojis,
-            name=name
-        )
+        emoji = discord.utils.get(guild.emojis, name=name)
 
         if emoji:
             return emoji
 
         return None
 
-    # Unicode emoji
     return value
 
 
 def emoji_exists(value, guild):
-
     if not value:
         return True
 
     value = str(value).strip()
 
-    # :isim:
     if value.startswith(":") and value.endswith(":"):
-
         name = value[1:-1].strip()
+        return discord.utils.get(guild.emojis, name=name) is not None
 
-        return (
-            discord.utils.get(
-                guild.emojis,
-                name=name
-            )
-            is not None
-        )
-
-    # <:isim:id> / <a:isim:id>
     if value.startswith("<:") or value.startswith("<a:"):
-
         try:
-
-            emoji = discord.PartialEmoji.from_str(
-                value
-            )
-
+            emoji = discord.PartialEmoji.from_str(value)
             return emoji.id is not None
-
         except Exception:
-
             return False
 
-    # Unicode
     return True
 
 
-def make_embed(
-    title,
-    description="",
-    color=0x5865F2
-):
+# =========================================================
+# YARDIMCI FONKSİYONLAR
+# =========================================================
 
-    return discord.Embed(
-        title=title,
-        description=description,
-        color=color
-    )
+def is_admin(interaction):
+    return interaction.user.guild_permissions.administrator
 
 
-def get_text_channel(
-    guild,
-    channel_id
-):
+async def admin_only(interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Bu işlem için yönetici yetkisine sahip olmalısın.",
+            ephemeral=True
+        )
+        return False
+
+    return True
+
+
+def uptime_text():
+    elapsed = datetime.now(timezone.utc) - START_TIME
+
+    total = int(elapsed.total_seconds())
+
+    days = total // 86400
+    total %= 86400
+
+    hours = total // 3600
+    total %= 3600
+
+    minutes = total // 60
+    seconds = total % 60
+
+    parts = []
+
+    if days:
+        parts.append(f"{days} gün")
+
+    if hours:
+        parts.append(f"{hours} saat")
+
+    if minutes:
+        parts.append(f"{minutes} dakika")
+
+    if seconds or not parts:
+        parts.append(f"{seconds} saniye")
+
+    return " ".join(parts)
+
+
+def get_user_warning_count(guild_id, user_id):
+    config = get_config(guild_id)
+    warnings = config["warnings"].get(str(user_id), [])
+    return len(warnings)
+
+
+def add_warning(guild_id, user_id, reason, moderator_id):
+    config = get_config(guild_id)
+
+    uid = str(user_id)
+
+    if uid not in config["warnings"]:
+        config["warnings"][uid] = []
+
+    config["warnings"][uid].append({
+        "reason": reason,
+        "moderator": moderator_id,
+        "time": datetime.now(timezone.utc).isoformat()
+    })
+
+    save_configs()
+
+    return len(config["warnings"][uid])
+
+
+async def send_log(guild, message, log_type="message"):
+    config = get_config(guild.id)
+
+    if not config["logs"].get(log_type, False):
+        return
+
+    channel_id = config["logs"].get("channel_id")
 
     if not channel_id:
-        return None
+        return
+
+    channel = guild.get_channel(channel_id)
+
+    if not channel:
+        return
 
     try:
-
-        return guild.get_channel(
-            int(channel_id)
-        )
-
+        await channel.send(message)
     except Exception:
-
-        return None
-
-
-async def send_log(guild, embed):
-
-    config = get_config(
-        guild.id
-    )
-
-    channel = get_text_channel(
-        guild,
-        config["logs"].get("channel")
-    )
-
-    if channel:
-
-        try:
-
-            await channel.send(
-                embed=embed
-            )
-
-        except Exception:
-
-            pass
+        pass
 
 
 # =========================================================
@@ -377,750 +344,37 @@ async def send_log(guild, embed):
 # =========================================================
 
 intents = discord.Intents.default()
-
 intents.guilds = True
 intents.members = True
 intents.messages = True
 intents.message_content = True
+intents.voice_states = True
 
-bot = commands.Bot(
-    command_prefix="!",
+
+class DynexBot(commands.Bot):
+    async def setup_hook(self):
+        self.add_view(TicketCloseView())
+
+        try:
+            await self.tree.sync()
+            print("Slash komutları senkronize edildi.")
+        except Exception as e:
+            print("Slash sync hatası:", e)
+
+
+bot = DynexBot(
+    command_prefix=PREFIX,
     intents=intents
 )
 
 
 # =========================================================
-# LANGUAGE
+# TICKET KAPAT
 # =========================================================
 
-LANGUAGES = {
-    "tr": "Türkçe",
-    "en": "English",
-    "az": "Azərbaycan dili"
-}
-
-
-class LanguageSelect(discord.ui.Select):
-
+class TicketCloseView(discord.ui.View):
     def __init__(self):
-
-        options = [
-            discord.SelectOption(
-                label="Türkçe",
-                value="tr"
-            ),
-            discord.SelectOption(
-                label="English",
-                value="en"
-            ),
-            discord.SelectOption(
-                label="Azərbaycan dili",
-                value="az"
-            )
-        ]
-
-        super().__init__(
-            placeholder="Dil seç",
-            options=options,
-            custom_id="dynex_language_select"
-        )
-
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["language"] = self.values[0]
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Dil "
-                f"**{LANGUAGES[self.values[0]]}** "
-                "olarak ayarlandı."
-            ),
-            embed=None,
-            view=None
-        )
-
-
-class LanguageView(discord.ui.View):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            LanguageSelect()
-        )
-
-
-# =========================================================
-# /DIL
-# =========================================================
-
-@bot.tree.command(
-    name="dil",
-    description="Botun dilini değiştir."
-)
-@app_commands.guild_only()
-async def dil(
-    interaction: discord.Interaction
-):
-
-    embed = make_embed(
-        f"{EMOJIS['settings']} Dynex Dil Ayarları",
-        "Botun kullanacağı dili seç."
-    )
-
-    await interaction.response.send_message(
-        embed=embed,
-        view=LanguageView(),
-        ephemeral=True
-    )
-
-
-# =========================================================
-# TICKET ADD
-# =========================================================
-
-class TicketAddModal(
-    discord.ui.Modal,
-    title="Ticket Seçeneği Ekle"
-):
-
-    name_input = discord.ui.TextInput(
-        label="Seçenek adı",
-        placeholder="Örneğin: Teknik Destek",
-        required=True,
-        max_length=50
-    )
-
-    button_input = discord.ui.TextInput(
-        label="Buton yazısı",
-        placeholder="Örneğin: Teknik Destek",
-        required=True,
-        max_length=50
-    )
-
-    emoji_input = discord.ui.TextInput(
-        label="Emoji",
-        placeholder="🎫 veya :dikkat: veya <:Dynex:123>",
-        required=False,
-        max_length=100
-    )
-
-    async def on_submit(self, interaction):
-
-        guild = interaction.guild
-
-        emoji_value = str(
-            self.emoji_input.value
-        ).strip()
-
-        if not emoji_exists(
-            emoji_value,
-            guild
-        ):
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Bu özel emoji sunucuda bulunamadı.",
-                ephemeral=True
-            )
-
-            return
-
-        config = get_config(
-            guild.id
-        )
-
-        option_id = secrets.token_hex(4)
-
-        config["ticket"]["options"].append(
-            {
-                "id": option_id,
-                "name": str(
-                    self.name_input.value
-                ),
-                "button": str(
-                    self.button_input.value
-                ),
-                "emoji": emoji_value
-            }
-        )
-
-        save_config()
-
-        await interaction.response.send_message(
-            f"{EMOJIS['yes']} Ticket seçeneği eklendi.",
-            ephemeral=True
-        )
-
-
-# =========================================================
-# TICKET EDIT
-# =========================================================
-
-class TicketEditModal(
-    discord.ui.Modal
-):
-
-    def __init__(
-        self,
-        option_id,
-        name,
-        button,
-        emoji
-    ):
-
-        super().__init__(
-            title="Ticket Seçeneğini Düzenle"
-        )
-
-        self.option_id = option_id
-
-        self.name_input = discord.ui.TextInput(
-            label="Seçenek adı",
-            default=name,
-            required=True,
-            max_length=50
-        )
-
-        self.button_input = discord.ui.TextInput(
-            label="Buton yazısı",
-            default=button,
-            required=True,
-            max_length=50
-        )
-
-        self.emoji_input = discord.ui.TextInput(
-            label="Emoji",
-            default=emoji,
-            required=False,
-            max_length=100
-        )
-
-        self.add_item(
-            self.name_input
-        )
-
-        self.add_item(
-            self.button_input
-        )
-
-        self.add_item(
-            self.emoji_input
-        )
-
-    async def on_submit(self, interaction):
-
-        guild = interaction.guild
-
-        config = get_config(
-            guild.id
-        )
-
-        emoji_value = str(
-            self.emoji_input.value
-        ).strip()
-
-        if not emoji_exists(
-            emoji_value,
-            guild
-        ):
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Bu özel emoji sunucuda bulunamadı.",
-                ephemeral=True
-            )
-
-            return
-
-        for option in config["ticket"]["options"]:
-
-            if option["id"] == self.option_id:
-
-                option["name"] = str(
-                    self.name_input.value
-                )
-
-                option["button"] = str(
-                    self.button_input.value
-                )
-
-                option["emoji"] = emoji_value
-
-                break
-
-        save_config()
-
-        await interaction.response.send_message(
-            f"{EMOJIS['yes']} Ticket seçeneği güncellendi.",
-            ephemeral=True
-        )
-
-
-# =========================================================
-# TICKET DELETE SELECT
-# =========================================================
-
-class TicketDeleteSelect(
-    discord.ui.Select
-):
-
-    def __init__(self, guild):
-
-        config = get_config(
-            guild.id
-        )
-
-        options = []
-
-        for option in config["ticket"]["options"][:25]:
-
-            emoji = parse_emoji(
-                option.get("emoji"),
-                guild
-            )
-
-            kwargs = {
-                "label": option["name"],
-                "value": option["id"]
-            }
-
-            if emoji:
-                kwargs["emoji"] = emoji
-
-            options.append(
-                discord.SelectOption(
-                    **kwargs
-                )
-            )
-
-        if not options:
-
-            options.append(
-                discord.SelectOption(
-                    label="Seçenek bulunamadı",
-                    value="none"
-                )
-            )
-
-        super().__init__(
-            placeholder="Silinecek seçeneği seç",
-            options=options,
-            custom_id="dynex_ticket_delete_select"
-        )
-
-    async def callback(self, interaction):
-
-        selected = self.values[0]
-
-        if selected == "none":
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Silinecek seçenek yok.",
-                ephemeral=True
-            )
-
-            return
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        target = next(
-            (
-                option
-                for option in config["ticket"]["options"]
-                if option["id"] == selected
-            ),
-            None
-        )
-
-        if not target:
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Seçenek bulunamadı.",
-                ephemeral=True
-            )
-
-            return
-
-        config["ticket"]["options"] = [
-            option
-            for option in config["ticket"]["options"]
-            if option["id"] != selected
-        ]
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} **{target['name']}** "
-                "seçeneği silindi."
-            ),
-            view=None
-        )
-
-
-class TicketDeleteView(
-    discord.ui.View
-):
-
-    def __init__(self, guild):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            TicketDeleteSelect(guild)
-        )
-
-
-# =========================================================
-# TICKET EDIT SELECT
-# =========================================================
-
-class TicketEditSelect(
-    discord.ui.Select
-):
-
-    def __init__(self, guild):
-
-        config = get_config(
-            guild.id
-        )
-
-        options = []
-
-        for option in config["ticket"]["options"][:25]:
-
-            options.append(
-                discord.SelectOption(
-                    label=option["name"],
-                    value=option["id"]
-                )
-            )
-
-        if not options:
-
-            options.append(
-                discord.SelectOption(
-                    label="Seçenek bulunamadı",
-                    value="none"
-                )
-            )
-
-        super().__init__(
-            placeholder="Düzenlenecek seçeneği seç",
-            options=options,
-            custom_id="dynex_ticket_edit_select"
-        )
-
-    async def callback(self, interaction):
-
-        selected = self.values[0]
-
-        if selected == "none":
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Seçenek bulunamadı.",
-                ephemeral=True
-            )
-
-            return
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        option = next(
-            (
-                item
-                for item in config["ticket"]["options"]
-                if item["id"] == selected
-            ),
-            None
-        )
-
-        if not option:
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Seçenek bulunamadı.",
-                ephemeral=True
-            )
-
-            return
-
-        await interaction.response.send_modal(
-            TicketEditModal(
-                option["id"],
-                option["name"],
-                option["button"],
-                option.get("emoji", "")
-            )
-        )
-
-
-class TicketEditView(
-    discord.ui.View
-):
-
-    def __init__(self, guild):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            TicketEditSelect(guild)
-        )
-
-
-# =========================================================
-# TICKET PANEL SETTINGS
-# =========================================================
-
-class TicketSettingsModal(
-    discord.ui.Modal,
-    title="Ticket Panel Ayarları"
-):
-
-    title_input = discord.ui.TextInput(
-        label="Ticket başlığı",
-        default="Destek Talebi",
-        required=True,
-        max_length=256
-    )
-
-    description_input = discord.ui.TextInput(
-        label="Ticket açıklaması",
-        style=discord.TextStyle.paragraph,
-        default="Aşağıdaki seçeneklerden uygun olanı seçerek ticket oluşturabilirsin.",
-        required=True,
-        max_length=4000
-    )
-
-    image_input = discord.ui.TextInput(
-        label="Panel resmi",
-        placeholder="https://...",
-        required=False,
-        max_length=500
-    )
-
-    async def on_submit(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["ticket"]["title"] = str(
-            self.title_input.value
-        )
-
-        config["ticket"]["description"] = str(
-            self.description_input.value
-        )
-
-        config["ticket"]["image_url"] = (
-            str(
-                self.image_input.value
-            ).strip()
-            or None
-        )
-
-        save_config()
-
-        await interaction.response.send_message(
-            f"{EMOJIS['yes']} Ticket panel ayarları kaydedildi.",
-            ephemeral=True
-        )
-
-
-# =========================================================
-# TICKET CATEGORY
-# =========================================================
-
-class TicketCategorySelect(
-    discord.ui.ChannelSelect
-):
-
-    def __init__(self):
-
-        super().__init__(
-            placeholder="Ticket kategorisini seç",
-            channel_types=[
-                discord.ChannelType.category
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_ticket_category"
-        )
-
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["ticket"]["category"] = str(
-            self.values[0].id
-        )
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Ticket kategorisi "
-                f"{self.values[0].name} olarak ayarlandı."
-            ),
-            view=None
-        )
-
-
-class TicketCategoryView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            TicketCategorySelect()
-        )
-
-
-# =========================================================
-# TICKET ROLE
-# =========================================================
-
-class TicketRoleSelect(
-    discord.ui.RoleSelect
-):
-
-    def __init__(self):
-
-        super().__init__(
-            placeholder="Ticket yetkili rolünü seç",
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_ticket_role"
-        )
-
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["ticket"]["role"] = str(
-            self.values[0].id
-        )
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Ticket yetkili rolü "
-                f"{self.values[0].mention} olarak ayarlandı."
-            ),
-            view=None
-        )
-
-
-class TicketRoleView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            TicketRoleSelect()
-        )
-
-
-# =========================================================
-# TICKET PANEL CHANNEL
-# =========================================================
-
-class TicketPanelChannelSelect(
-    discord.ui.ChannelSelect
-):
-
-    def __init__(self):
-
-        super().__init__(
-            placeholder="Ticket panel kanalını seç",
-            channel_types=[
-                discord.ChannelType.text
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_ticket_panel_channel"
-        )
-
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["ticket"]["channel"] = str(
-            self.values[0].id
-        )
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Ticket panel kanalı "
-                f"{self.values[0].mention} olarak ayarlandı."
-            ),
-            view=None
-        )
-
-
-class TicketPanelChannelView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            TicketPanelChannelSelect()
-        )
-
-
-# =========================================================
-# TICKET CLOSE
-# =========================================================
-
-class TicketCloseView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=None
-        )
+        super().__init__(timeout=None)
 
     @discord.ui.button(
         label="Ticket Kapat",
@@ -1132,45 +386,18 @@ class TicketCloseView(
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
-
-        channel = interaction.channel
-
-        if not channel:
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Kanal bulunamadı.",
-                ephemeral=True
-            )
-
-            return
-
-        topic = channel.topic or ""
-
-        if not topic.startswith(
-            "DynexTicket:"
-        ):
-
-            await interaction.response.send_message(
-                f"{EMOJIS['no']} Bu kanal bir Dynex ticketı değil.",
-                ephemeral=True
-            )
-
+        if not interaction.channel:
             return
 
         await interaction.response.send_message(
-            f"{EMOJIS['wait']} Ticket kapatılıyor..."
+            f"{EMOJIS['locked']} Ticket 5 saniye içinde kapatılıyor."
         )
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(5)
 
         try:
-
-            await channel.delete(
-                reason="Dynex ticket kapatıldı"
-            )
-
+            await interaction.channel.delete()
         except Exception:
-
             pass
 
 
@@ -1178,662 +405,941 @@ class TicketCloseView(
 # TICKET PANEL
 # =========================================================
 
-class TicketPanelView(
-    discord.ui.View
-):
+class TicketPanelView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
 
-    def __init__(self, guild_id):
-
-        super().__init__(
-            timeout=None
-        )
-
-        guild = bot.get_guild(
-            guild_id
-        )
-
-        if not guild:
-            return
-
-        config = get_config(
-            guild_id
-        )
+        config = get_config(guild.id)
 
         for option in config["ticket"]["options"]:
-
-            emoji = parse_emoji(
-                option.get("emoji"),
-                guild
-            )
+            option_id = option.get("id")
+            name = option.get("button") or option.get("name") or "Ticket"
+            emoji = parse_emoji(option.get("emoji"), guild)
 
             button = discord.ui.Button(
-                label=option.get(
-                    "button",
-                    option["name"]
-                ),
+                label=name[:80],
                 style=discord.ButtonStyle.primary,
-                custom_id=(
-                    f"dynex_ticket:"
-                    f"{option['id']}"
-                ),
+                custom_id=f"dynex_ticket_{option_id}",
                 emoji=emoji
             )
 
             async def callback(
-                interaction,
-                option_id=option["id"]
+                interaction: discord.Interaction,
+                option_id=option_id
             ):
-
-                await create_ticket(
-                    interaction,
-                    option_id
-                )
+                await self.create_ticket(interaction, option_id)
 
             button.callback = callback
+            self.add_item(button)
 
-            self.add_item(
-                button
-            )
+    async def create_ticket(self, interaction, option_id):
+        guild = interaction.guild
 
-
-# =========================================================
-# CREATE TICKET
-# =========================================================
-
-async def create_ticket(
-    interaction,
-    option_id
-):
-
-    guild = interaction.guild
-    member = interaction.user
-
-    config = get_config(
-        guild.id
-    )
-
-    option = next(
-        (
-            item
-            for item in config["ticket"]["options"]
-            if item["id"] == option_id
-        ),
-        None
-    )
-
-    if not option:
-
-        await interaction.response.send_message(
-            f"{EMOJIS['no']} Ticket seçeneği bulunamadı.",
-            ephemeral=True
-        )
-
-        return
-
-    for channel in guild.text_channels:
-
-        if channel.topic == (
-            f"DynexTicket:{member.id}"
-        ):
-
-            await interaction.response.send_message(
-                (
-                    f"{EMOJIS['wait']} Zaten açık bir ticketın var: "
-                    f"{channel.mention}"
-                ),
-                ephemeral=True
-            )
-
+        if not guild:
             return
 
-    category = None
+        config = get_config(guild.id)
 
-    if config["ticket"].get("category"):
+        option = None
 
-        try:
+        for item in config["ticket"]["options"]:
+            if item.get("id") == option_id:
+                option = item
+                break
 
+        if not option:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Bu ticket seçeneği artık mevcut değil.",
+                ephemeral=True
+            )
+            return
+
+        existing = discord.utils.get(
+            guild.text_channels,
+            name=f"ticket-{interaction.user.id}"
+        )
+
+        if existing:
+            await interaction.response.send_message(
+                f"{EMOJIS['wait']} Zaten açık bir ticketın var: {existing.mention}",
+                ephemeral=True
+            )
+            return
+
+        category = None
+
+        if config["ticket"]["category_id"]:
             category = guild.get_channel(
-                int(
-                    config["ticket"]["category"]
-                )
+                config["ticket"]["category_id"]
             )
 
-        except Exception:
-
-            category = None
-
-    overwrites = {
-
-        guild.default_role:
-            discord.PermissionOverwrite(
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(
                 view_channel=False
             ),
-
-        member:
-            discord.PermissionOverwrite(
+            interaction.user: discord.PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
                 read_message_history=True
             )
-    }
+        }
 
-    role = None
+        role = None
 
-    if config["ticket"].get("role"):
+        if config["ticket"]["role_id"]:
+            role = guild.get_role(config["ticket"]["role_id"])
+
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                )
 
         try:
-
-            role = guild.get_role(
-                int(
-                    config["ticket"]["role"]
-                )
+            channel = await guild.create_text_channel(
+                f"ticket-{interaction.user.id}",
+                category=category,
+                overwrites=overwrites
             )
-
         except Exception:
-
-            role = None
-
-    if role:
-
-        overwrites[role] = (
-            discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Ticket oluşturulamadı. Botun kanal oluşturma yetkisini kontrol et.",
+                ephemeral=True
             )
+            return
+
+        embed = discord.Embed(
+            title=option.get("name", "Ticket"),
+            description=(
+                f"{interaction.user.mention}, ticketın oluşturuldu.\n\n"
+                "Yetkililer en kısa sürede ilgilenecektir."
+            ),
+            color=discord.Color.blurple()
         )
 
-    safe_name = "".join(
-        char
-        for char in member.name.lower()
-        if char.isalnum() or char in "-_"
-    )
-
-    if not safe_name:
-        safe_name = "kullanici"
-
-    channel_name = (
-        f"ticket-{safe_name}"
-    )[:100]
-
-    try:
-
-        channel = await guild.create_text_channel(
-            channel_name,
-            category=category,
-            overwrites=overwrites,
-            topic=f"DynexTicket:{member.id}"
+        await channel.send(
+            content=role.mention if role else None,
+            embed=embed,
+            view=TicketCloseView()
         )
-
-    except discord.Forbidden:
 
         await interaction.response.send_message(
-            f"{EMOJIS['no']} Ticket kanalı oluşturma yetkim yok.",
+            f"{EMOJIS['yes']} Ticket oluşturuldu: {channel.mention}",
             ephemeral=True
         )
 
-        return
-
-    embed = make_embed(
-        config["ticket"]["title"],
-        (
-            f"{config['ticket']['description']}\n\n"
-            f"**Seçenek:** {option['name']}"
-        )
-    )
-
-    if config["ticket"].get(
-        "image_url"
-    ):
-
-        embed.set_image(
-            url=config["ticket"]["image_url"]
-        )
-
-    await channel.send(
-        content=member.mention,
-        embed=embed,
-        view=TicketCloseView()
-    )
-
-    await interaction.response.send_message(
-        (
-            f"{EMOJIS['yes']} Ticket oluşturuldu: "
-            f"{channel.mention}"
-        ),
-        ephemeral=True
-    )
-
 
 # =========================================================
-# TICKET OPTIONS
+# AYAR MENÜSÜ
 # =========================================================
 
-class TicketOptionsView(
-    discord.ui.View
-):
-
+class SettingsSelect(discord.ui.Select):
     def __init__(self):
+        options = [
+            discord.SelectOption(
+                label="Ticket",
+                value="ticket",
+                emoji="🎫"
+            ),
+            discord.SelectOption(
+                label="Karşılama",
+                value="welcome",
+                emoji="👋"
+            ),
+            discord.SelectOption(
+                label="Moderasyon",
+                value="moderation",
+                emoji="🛡️"
+            ),
+            discord.SelectOption(
+                label="Log",
+                value="logs",
+                emoji="📜"
+            ),
+            discord.SelectOption(
+                label="Oto Rol",
+                value="autorole",
+                emoji="🎭"
+            ),
+            discord.SelectOption(
+                label="Ses",
+                value="voice",
+                emoji="🔊"
+            ),
+            discord.SelectOption(
+                label="Çekiliş",
+                value="giveaway",
+                emoji="🎉"
+            ),
+        ]
 
         super().__init__(
-            timeout=120
+            placeholder="Bir ayar kategorisi seç...",
+            options=options
         )
+
+    async def callback(self, interaction):
+        value = self.values[0]
+
+        if value == "ticket":
+            await interaction.response.edit_message(
+                content=f"{EMOJIS['settings']} **Ticket Ayarları**",
+                view=TicketSettingsView()
+            )
+
+        elif value == "welcome":
+            await interaction.response.edit_message(
+                content=f"{EMOJIS['settings']} **Karşılama Ayarları**",
+                view=WelcomeSettingsView()
+            )
+
+        elif value == "moderation":
+            await interaction.response.edit_message(
+                content=f"{EMOJIS['settings']} **Moderasyon Ayarları**",
+                view=ModerationSettingsView()
+            )
+
+        elif value == "logs":
+            await interaction.response.edit_message(
+                content=f"{EMOJIS['settings']} **Log Ayarları**",
+                view=LogsSettingsView()
+            )
+
+        elif value == "autorole":
+            await interaction.response.edit_message(
+                content=f"{EMOJIS['settings']} **Oto Rol Ayarları**",
+                view=AutoroleSettingsView()
+            )
+
+        elif value == "voice":
+            await interaction.response.edit_message(
+                content=f"{EMOJIS['settings']} **Ses Ayarları**",
+                view=VoiceSettingsView()
+            )
+
+        elif value == "giveaway":
+            await interaction.response.edit_message(
+                content=f"{EMOJIS['settings']} **Çekiliş Ayarları**",
+                view=GiveawaySettingsView()
+            )
+
+
+class SettingsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+        self.add_item(SettingsSelect())
+
+
+# =========================================================
+# TICKET AYARLARI
+# =========================================================
+
+class TicketSettingsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="Kategori", style=discord.ButtonStyle.secondary)
+    async def category(self, interaction, button):
+        await interaction.response.send_message(
+            "Ticket kategorisini seç:",
+            view=TicketCategoryView(),
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Yetkili Rolü", style=discord.ButtonStyle.secondary)
+    async def role(self, interaction, button):
+        await interaction.response.send_message(
+            "Ticket yetkili rolünü seç:",
+            view=TicketRoleView(),
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Panel Kanalı", style=discord.ButtonStyle.secondary)
+    async def channel(self, interaction, button):
+        await interaction.response.send_message(
+            "Ticket panel kanalını seç:",
+            view=TicketChannelView(),
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Panel Bilgileri", style=discord.ButtonStyle.primary)
+    async def info(self, interaction, button):
+        await interaction.response.send_modal(TicketPanelModal())
+
+    @discord.ui.button(label="Seçenekler", style=discord.ButtonStyle.success)
+    async def options(self, interaction, button):
+        await interaction.response.edit_message(
+            content="**Ticket Seçenekleri**",
+            view=TicketOptionsView()
+        )
+
+    @discord.ui.button(label="Paneli Gönder", style=discord.ButtonStyle.success)
+    async def send_panel(self, interaction, button):
+        config = get_config(interaction.guild.id)
+
+        if not config["ticket"]["panel_channel_id"]:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Önce panel kanalını ayarla.",
+                ephemeral=True
+            )
+            return
+
+        if not config["ticket"]["options"]:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Önce en az bir ticket seçeneği eklemelisin.",
+                ephemeral=True
+            )
+            return
+
+        channel = interaction.guild.get_channel(
+            config["ticket"]["panel_channel_id"]
+        )
+
+        if not channel:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Panel kanalı bulunamadı.",
+                ephemeral=True
+            )
+            return
+
+        embed = discord.Embed(
+            title=config["ticket"]["panel_title"],
+            description=config["ticket"]["panel_description"],
+            color=discord.Color.blurple()
+        )
+
+        if config["ticket"]["panel_image"]:
+            embed.set_image(url=config["ticket"]["panel_image"])
+
+        await channel.send(
+            embed=embed,
+            view=TicketPanelView(interaction.guild)
+        )
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ticket paneli gönderildi.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Geri", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            content=f"{EMOJIS['settings']} **Dynex Ayarları**",
+            view=SettingsView()
+        )
+
+
+class TicketCategoryView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+        self.add_item(
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.category],
+                placeholder="Ticket kategorisini seç..."
+            )
+        )
+
+        self.children[0].callback = self.callback
+
+    async def callback(self, interaction):
+        selected = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["ticket"]["category_id"] = selected.id
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ticket kategorisi ayarlandı.",
+            ephemeral=True
+        )
+
+
+class TicketRoleView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+        self.add_item(
+            discord.ui.RoleSelect(
+                placeholder="Ticket yetkili rolünü seç..."
+            )
+        )
+
+        self.children[0].callback = self.callback
+
+    async def callback(self, interaction):
+        selected = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["ticket"]["role_id"] = selected.id
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ticket yetkili rolü ayarlandı.",
+            ephemeral=True
+        )
+
+
+class TicketChannelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+        self.add_item(
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.text],
+                placeholder="Panel kanalını seç..."
+            )
+        )
+
+        self.children[0].callback = self.callback
+
+    async def callback(self, interaction):
+        selected = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["ticket"]["panel_channel_id"] = selected.id
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ticket panel kanalı ayarlandı.",
+            ephemeral=True
+        )
+
+
+class TicketPanelModal(discord.ui.Modal, title="Ticket Paneli"):
+    title_input = discord.ui.TextInput(
+        label="Panel başlığı",
+        default="Destek Talebi",
+        max_length=100
+    )
+
+    description_input = discord.ui.TextInput(
+        label="Panel açıklaması",
+        style=discord.TextStyle.paragraph,
+        default="Destek almak için aşağıdaki seçeneklerden birini seç.",
+        max_length=1000
+    )
+
+    image_input = discord.ui.TextInput(
+        label="Görsel URL",
+        required=False
+    )
+
+    async def on_submit(self, interaction):
+        config = get_config(interaction.guild.id)
+
+        config["ticket"]["panel_title"] = str(self.title_input)
+        config["ticket"]["panel_description"] = str(self.description_input)
+        config["ticket"]["panel_image"] = str(self.image_input)
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ticket panel bilgileri kaydedildi.",
+            ephemeral=True
+        )
+
+
+# =========================================================
+# TICKET SEÇENEKLERİ
+# =========================================================
+
+class TicketOptionsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
 
     @discord.ui.button(
         label="Seçenek Ekle",
         style=discord.ButtonStyle.success
     )
-    async def add_option(
-        self,
-        interaction,
-        button
-    ):
+    async def add_option(self, interaction, button):
+        await interaction.response.send_modal(AddTicketOptionModal())
 
-        await interaction.response.send_modal(
-            TicketAddModal()
+    @discord.ui.button(
+        label="Seçenekleri Gör",
+        style=discord.ButtonStyle.secondary
+    )
+    async def show_options(self, interaction, button):
+        config = get_config(interaction.guild.id)
+        options = config["ticket"]["options"]
+
+        if not options:
+            await interaction.response.send_message(
+                "Henüz ticket seçeneği eklenmemiş.",
+                ephemeral=True
+            )
+            return
+
+        text = []
+
+        for i, option in enumerate(options, 1):
+            emoji = option.get("emoji") or "Yok"
+
+            text.append(
+                f"**{i}. {option.get('name', 'İsimsiz')}** "
+                f"— Buton: `{option.get('button', '')}` "
+                f"— Emoji: `{emoji}`"
+            )
+
+        await interaction.response.send_message(
+            "\n".join(text),
+            ephemeral=True
         )
 
     @discord.ui.button(
         label="Seçenek Sil",
         style=discord.ButtonStyle.danger
     )
-    async def delete_option(
-        self,
-        interaction,
-        button
-    ):
+    async def delete_option(self, interaction, button):
+        config = get_config(interaction.guild.id)
 
-        await interaction.response.edit_message(
-            content="Silinecek ticket seçeneğini seç:",
-            embed=None,
-            view=TicketDeleteView(
-                interaction.guild
+        if not config["ticket"]["options"]:
+            await interaction.response.send_message(
+                "Silinecek seçenek yok.",
+                ephemeral=True
             )
+            return
+
+        await interaction.response.send_modal(
+            DeleteTicketOptionModal()
         )
 
     @discord.ui.button(
-        label="Seçenek Düzenle",
+        label="Geri",
+        style=discord.ButtonStyle.secondary
+    )
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            content="**Ticket Ayarları**",
+            view=TicketSettingsView()
+        )
+
+
+class AddTicketOptionModal(discord.ui.Modal, title="Ticket Seçeneği Ekle"):
+    name_input = discord.ui.TextInput(
+        label="Seçenek adı",
+        placeholder="Örneğin: Destek",
+        max_length=50
+    )
+
+    button_input = discord.ui.TextInput(
+        label="Buton yazısı",
+        placeholder="Örneğin: Destek",
+        max_length=50
+    )
+
+    emoji_input = discord.ui.TextInput(
+        label="Emoji",
+        placeholder="🎫 veya :emoji: veya <:isim:id>",
+        required=False,
+        max_length=100
+    )
+
+    async def on_submit(self, interaction):
+        if not emoji_exists(
+            str(self.emoji_input),
+            interaction.guild
+        ):
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Bu emoji sunucuda bulunamadı.",
+                ephemeral=True
+            )
+            return
+
+        config = get_config(interaction.guild.id)
+
+        option_id = (
+            str(self.name_input)
+            .lower()
+            .replace(" ", "_")
+        )
+
+        option_id = "".join(
+            c for c in option_id
+            if c.isalnum() or c == "_"
+        )
+
+        if not option_id:
+            option_id = f"ticket_{len(config['ticket']['options']) + 1}"
+
+        existing_ids = {
+            x.get("id")
+            for x in config["ticket"]["options"]
+        }
+
+        base_id = option_id
+        counter = 2
+
+        while option_id in existing_ids:
+            option_id = f"{base_id}_{counter}"
+            counter += 1
+
+        config["ticket"]["options"].append({
+            "id": option_id,
+            "name": str(self.name_input),
+            "button": str(self.button_input),
+            "emoji": str(self.emoji_input)
+        })
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ticket seçeneği eklendi.",
+            ephemeral=True
+        )
+
+
+class DeleteTicketOptionModal(
+    discord.ui.Modal,
+    title="Ticket Seçeneği Sil"
+):
+    option_input = discord.ui.TextInput(
+        label="Silinecek seçenek",
+        placeholder="Seçenek adını yaz"
+    )
+
+    async def on_submit(self, interaction):
+        config = get_config(interaction.guild.id)
+
+        target = str(self.option_input).lower()
+
+        old = config["ticket"]["options"]
+
+        new = [
+            x for x in old
+            if str(x.get("name", "")).lower() != target
+            and str(x.get("id", "")).lower() != target
+        ]
+
+        if len(old) == len(new):
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Bu ticket seçeneği bulunamadı.",
+                ephemeral=True
+            )
+            return
+
+        config["ticket"]["options"] = new
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ticket seçeneği silindi.",
+            ephemeral=True
+        )
+
+
+# =========================================================
+# KARŞILAMA AYARLARI
+# =========================================================
+
+class WelcomeSettingsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(
+        label="Kanal",
+        style=discord.ButtonStyle.secondary
+    )
+    async def channel(self, interaction, button):
+        await interaction.response.send_message(
+            "Karşılama kanalını seç:",
+            view=WelcomeChannelView(),
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="Mesaj",
         style=discord.ButtonStyle.primary
     )
-    async def edit_option(
-        self,
-        interaction,
-        button
-    ):
+    async def message(self, interaction, button):
+        await interaction.response.send_modal(
+            WelcomeModal()
+        )
 
+    @discord.ui.button(
+        label="Geri",
+        style=discord.ButtonStyle.secondary
+    )
+    async def back(self, interaction, button):
         await interaction.response.edit_message(
-            content="Düzenlenecek ticket seçeneğini seç:",
-            embed=None,
-            view=TicketEditView(
-                interaction.guild
+            content="**Dynex Ayarları**",
+            view=SettingsView()
+        )
+
+
+class WelcomeChannelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+        self.add_item(
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.text],
+                placeholder="Karşılama kanalını seç..."
             )
         )
 
+        self.children[0].callback = self.callback
 
-# =========================================================
-# SEND TICKET PANEL
-# =========================================================
+    async def callback(self, interaction):
+        channel = self.children[0].values[0]
 
-async def send_ticket_panel(
-    interaction
-):
+        config = get_config(interaction.guild.id)
+        config["welcome"]["channel_id"] = channel.id
 
-    config = get_config(
-        interaction.guild.id
-    )
-
-    # Hazır seçenek yoksa panel gönderme
-    if not config["ticket"]["options"]:
+        save_configs()
 
         await interaction.response.send_message(
-            (
-                f"{EMOJIS['no']} Önce **Seçenekler → Seçenek Ekle** "
-                "ile en az bir ticket seçeneği oluştur."
-            ),
+            f"{EMOJIS['yes']} Karşılama kanalı ayarlandı.",
             ephemeral=True
         )
 
-        return
 
-    channel = get_text_channel(
-        interaction.guild,
-        config["ticket"].get("channel")
-    )
-
-    if not channel:
-
-        await interaction.response.send_message(
-            f"{EMOJIS['no']} Önce ticket panel kanalını seç.",
-            ephemeral=True
-        )
-
-        return
-
-    embed = make_embed(
-        config["ticket"]["title"],
-        config["ticket"]["description"]
-    )
-
-    if config["ticket"].get(
-        "image_url"
-    ):
-
-        embed.set_image(
-            url=config["ticket"]["image_url"]
-        )
-
-    try:
-
-        await channel.send(
-            embed=embed,
-            view=TicketPanelView(
-                interaction.guild.id
-            )
-        )
-
-    except discord.Forbidden:
-
-        await interaction.response.send_message(
-            f"{EMOJIS['no']} O kanala mesaj gönderemiyorum.",
-            ephemeral=True
-        )
-
-        return
-
-    await interaction.response.send_message(
-        (
-            f"{EMOJIS['yes']} Ticket paneli "
-            f"{channel.mention} kanalına gönderildi."
-        ),
-        ephemeral=True
-    )
-
-
-# =========================================================
-# WELCOME MODAL
-# =========================================================
-
-class WelcomeSettingsModal(
-    discord.ui.Modal,
-    title="Hoş Geldin Ayarları"
-):
-
+class WelcomeModal(discord.ui.Modal, title="Karşılama Ayarları"):
     title_input = discord.ui.TextInput(
         label="Başlık",
         default="Hoş Geldin!",
-        required=True,
-        max_length=256
+        max_length=100
     )
 
     description_input = discord.ui.TextInput(
         label="Açıklama",
-        default="{member} sunucumuza katıldı.",
-        required=True,
-        max_length=4000
-    )
-
-    message_input = discord.ui.TextInput(
-        label="Mesaj",
-        default="Sunucumuza hoş geldin {member}!",
-        required=True,
-        max_length=2000
+        default="{user}, sunucumuza hoş geldin!",
+        max_length=1000
     )
 
     image_input = discord.ui.TextInput(
-        label="Resim URL",
-        required=False,
-        max_length=500
+        label="Görsel URL",
+        required=False
     )
 
     dm_input = discord.ui.TextInput(
         label="DM mesajı",
-        default="Sunucumuza hoş geldin!",
         required=False,
-        max_length=2000
+        max_length=1000
     )
 
     async def on_submit(self, interaction):
+        config = get_config(interaction.guild.id)
 
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["welcome"]["title"] = str(
-            self.title_input.value
-        )
-
+        config["welcome"]["title"] = str(self.title_input)
         config["welcome"]["description"] = str(
-            self.description_input.value
+            self.description_input
         )
+        config["welcome"]["image"] = str(self.image_input)
 
-        config["welcome"]["message"] = str(
-            self.message_input.value
-        )
+        dm = str(self.dm_input)
 
-        config["welcome"]["image_url"] = (
-            str(
-                self.image_input.value
-            ).strip()
-            or None
-        )
+        if dm:
+            config["welcome"]["dm_enabled"] = True
+            config["welcome"]["dm_message"] = dm
+        else:
+            config["welcome"]["dm_enabled"] = False
+            config["welcome"]["dm_message"] = ""
 
-        config["welcome"]["dm_message"] = str(
-            self.dm_input.value
-        )
-
-        save_config()
+        save_configs()
 
         await interaction.response.send_message(
-            f"{EMOJIS['yes']} Hoş geldin ayarları kaydedildi.",
+            f"{EMOJIS['yes']} Karşılama ayarları kaydedildi.",
             ephemeral=True
         )
 
 
 # =========================================================
-# WELCOME CHANNEL
+# OTO ROL
 # =========================================================
 
-class WelcomeChannelSelect(
-    discord.ui.ChannelSelect
-):
-
+class AutoroleSettingsView(discord.ui.View):
     def __init__(self):
+        super().__init__(timeout=300)
 
-        super().__init__(
-            placeholder="Hoş geldin kanalını seç",
-            channel_types=[
-                discord.ChannelType.text
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_welcome_channel"
+    @discord.ui.button(
+        label="Rol Seç",
+        style=discord.ButtonStyle.success
+    )
+    async def role(self, interaction, button):
+        await interaction.response.send_message(
+            "Oto rolü seç:",
+            view=AutoroleRoleView(),
+            ephemeral=True
         )
 
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["welcome"]["channel"] = str(
-            self.values[0].id
-        )
-
-        save_config()
-
+    @discord.ui.button(
+        label="Geri",
+        style=discord.ButtonStyle.secondary
+    )
+    async def back(self, interaction, button):
         await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Hoş geldin kanalı "
-                f"{self.values[0].mention} olarak ayarlandı."
-            ),
-            view=None
+            content="**Dynex Ayarları**",
+            view=SettingsView()
         )
 
 
-class WelcomeChannelView(
-    discord.ui.View
-):
-
+class AutoroleRoleView(discord.ui.View):
     def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
+        super().__init__(timeout=120)
 
         self.add_item(
-            WelcomeChannelSelect()
+            discord.ui.RoleSelect(
+                placeholder="Oto rolü seç..."
+            )
         )
 
-
-# =========================================================
-# AUTOROLE
-# =========================================================
-
-class AutoroleSelect(
-    discord.ui.RoleSelect
-):
-
-    def __init__(self):
-
-        super().__init__(
-            placeholder="Otorol seç",
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_autorole"
-        )
+        self.children[0].callback = self.callback
 
     async def callback(self, interaction):
+        role = self.children[0].values[0]
 
-        config = get_config(
-            interaction.guild.id
-        )
+        config = get_config(interaction.guild.id)
+        config["autorole"]["role_id"] = role.id
 
-        config["autorole"]["role"] = str(
-            self.values[0].id
-        )
+        save_configs()
 
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Otorol "
-                f"{self.values[0].mention} olarak ayarlandı."
-            ),
-            view=None
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Oto rol ayarlandı.",
+            ephemeral=True
         )
 
 
-class AutoroleView(
-    discord.ui.View
-):
+# =========================================================
+# MODERASYON
+# =========================================================
 
+class ModerationSettingsView(discord.ui.View):
     def __init__(self):
+        super().__init__(timeout=300)
 
-        super().__init__(
-            timeout=120
+    @discord.ui.button(
+        label="Ayarlar",
+        style=discord.ButtonStyle.primary
+    )
+    async def settings(self, interaction, button):
+        await interaction.response.send_modal(
+            ModerationModal()
         )
+
+    @discord.ui.button(
+        label="Log Kanalı",
+        style=discord.ButtonStyle.secondary
+    )
+    async def channel(self, interaction, button):
+        await interaction.response.send_message(
+            "Moderasyon log kanalını seç:",
+            view=ModerationChannelView(),
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="Geri",
+        style=discord.ButtonStyle.secondary
+    )
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            content="**Dynex Ayarları**",
+            view=SettingsView()
+        )
+
+
+class ModerationChannelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
 
         self.add_item(
-            AutoroleSelect()
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.text],
+                placeholder="Log kanalını seç..."
+            )
+        )
+
+        self.children[0].callback = self.callback
+
+    async def callback(self, interaction):
+        channel = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["moderation"]["log_channel_id"] = channel.id
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Moderasyon log kanalı ayarlandı.",
+            ephemeral=True
         )
 
 
-# =========================================================
-# MODERATION MODAL
-# =========================================================
-
-class ModerationSettingsModal(
+class ModerationModal(
     discord.ui.Modal,
     title="Moderasyon Ayarları"
 ):
-
     bad_words = discord.ui.TextInput(
         label="Yasaklı kelimeler",
         placeholder="kelime1, kelime2, kelime3",
-        required=False,
-        max_length=2000
+        required=False
     )
 
     max_warnings = discord.ui.TextInput(
-        label="Maksimum uyarı",
+        label="Uyarı limiti",
         default="3",
-        required=True,
-        max_length=3
-    )
-
-    warning_action = discord.ui.TextInput(
-        label="Uyarı sonrası işlem",
-        placeholder="timeout / kick / ban",
-        default="timeout",
-        required=True,
-        max_length=20
+        max_length=2
     )
 
     timeout_minutes = discord.ui.TextInput(
         label="Timeout süresi",
         default="10",
-        required=True,
         max_length=5
     )
 
-    async def on_submit(self, interaction):
+    anti_link = discord.ui.TextInput(
+        label="Anti-link",
+        placeholder="açık / kapalı",
+        default="kapalı"
+    )
 
-        config = get_config(
-            interaction.guild.id
-        )
+    anti_spam = discord.ui.TextInput(
+        label="Anti-spam",
+        placeholder="açık / kapalı",
+        default="kapalı"
+    )
+
+    async def on_submit(self, interaction):
+        config = get_config(interaction.guild.id)
 
         words = [
-            word.strip().lower()
-            for word in str(
-                self.bad_words.value
-            ).split(",")
-            if word.strip()
+            x.strip()
+            for x in str(self.bad_words).split(",")
+            if x.strip()
         ]
 
         try:
-
             max_warnings = max(
                 1,
-                int(
-                    self.max_warnings.value
-                )
+                int(str(self.max_warnings))
             )
-
         except Exception:
-
             max_warnings = 3
 
         try:
-
-            timeout_minutes = max(
+            timeout = max(
                 1,
-                int(
-                    self.timeout_minutes.value
-                )
+                int(str(self.timeout_minutes))
             )
-
         except Exception:
-
-            timeout_minutes = 10
-
-        action = str(
-            self.warning_action.value
-        ).strip().lower()
-
-        if action not in (
-            "timeout",
-            "kick",
-            "ban"
-        ):
-
-            action = "timeout"
+            timeout = 10
 
         config["moderation"]["bad_words"] = words
         config["moderation"]["max_warnings"] = max_warnings
-        config["moderation"]["warning_action"] = action
-        config["moderation"]["timeout_minutes"] = timeout_minutes
+        config["moderation"]["timeout_minutes"] = timeout
 
-        save_config()
+        config["moderation"]["anti_link"] = (
+            str(self.anti_link).lower() in
+            ["açık", "acik", "evet", "on", "true"]
+        )
+
+        config["moderation"]["anti_spam"] = (
+            str(self.anti_spam).lower() in
+            ["açık", "acik", "evet", "on", "true"]
+        )
+
+        save_configs()
 
         await interaction.response.send_message(
             f"{EMOJIS['yes']} Moderasyon ayarları kaydedildi.",
@@ -1842,135 +1348,133 @@ class ModerationSettingsModal(
 
 
 # =========================================================
-# MODERATION CHANNEL
+# LOG AYARLARI
 # =========================================================
 
-class ModerationChannelSelect(
-    discord.ui.ChannelSelect
-):
-
+class LogsSettingsView(discord.ui.View):
     def __init__(self):
+        super().__init__(timeout=300)
 
-        super().__init__(
-            placeholder="Moderasyon log kanalını seç",
-            channel_types=[
-                discord.ChannelType.text
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_moderation_channel"
+    @discord.ui.button(
+        label="Log Kanalı",
+        style=discord.ButtonStyle.secondary
+    )
+    async def channel(self, interaction, button):
+        await interaction.response.send_message(
+            "Log kanalını seç:",
+            view=LogsChannelView(),
+            ephemeral=True
         )
 
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
+    @discord.ui.button(
+        label="Log Türleri",
+        style=discord.ButtonStyle.primary
+    )
+    async def types(self, interaction, button):
+        await interaction.response.send_modal(
+            LogsModal()
         )
 
-        config["moderation"]["channel"] = str(
-            self.values[0].id
-        )
-
-        save_config()
-
+    @discord.ui.button(
+        label="Geri",
+        style=discord.ButtonStyle.secondary
+    )
+    async def back(self, interaction, button):
         await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Moderasyon log kanalı "
-                f"{self.values[0].mention} olarak ayarlandı."
-            ),
-            view=None
+            content="**Dynex Ayarları**",
+            view=SettingsView()
         )
 
 
-class ModerationChannelView(
-    discord.ui.View
-):
-
+class LogsChannelView(discord.ui.View):
     def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
+        super().__init__(timeout=120)
 
         self.add_item(
-            ModerationChannelSelect()
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.text],
+                placeholder="Log kanalını seç..."
+            )
+        )
+
+        self.children[0].callback = self.callback
+
+    async def callback(self, interaction):
+        channel = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["logs"]["channel_id"] = channel.id
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Log kanalı ayarlandı.",
+            ephemeral=True
         )
 
 
-# =========================================================
-# LOG MODAL
-# =========================================================
-
-class LogsSettingsModal(
-    discord.ui.Modal,
-    title="Log Ayarları"
-):
-
-    delete_input = discord.ui.TextInput(
-        label="Silinen mesajlar",
-        default="evet",
-        required=True
+class LogsModal(discord.ui.Modal, title="Log Ayarları"):
+    message_delete = discord.ui.TextInput(
+        label="Mesaj silme",
+        default="açık"
     )
 
-    edit_input = discord.ui.TextInput(
-        label="Düzenlenen mesajlar",
-        default="evet",
-        required=True
+    message_edit = discord.ui.TextInput(
+        label="Mesaj düzenleme",
+        default="açık"
     )
 
-    member_input = discord.ui.TextInput(
-        label="Üye giriş ve çıkış",
-        default="evet",
-        required=True
+    member_logs = discord.ui.TextInput(
+        label="Üye giriş/çıkış",
+        default="açık"
     )
 
-    moderation_input = discord.ui.TextInput(
-        label="Ban, kick ve timeout",
-        default="evet",
-        required=True
+    moderation_logs = discord.ui.TextInput(
+        label="Ban/Kick/Timeout",
+        default="açık"
     )
 
     async def on_submit(self, interaction):
+        config = get_config(interaction.guild.id)
 
-        config = get_config(
-            interaction.guild.id
-        )
-
-        def is_yes(value):
-
-            return str(value).strip().lower() in (
+        def enabled(value):
+            return str(value).lower() in [
+                "açık",
+                "acik",
                 "evet",
-                "yes",
-                "e",
-                "y",
-                "true",
-                "1"
-            )
+                "on",
+                "true"
+            ]
 
-        config["logs"]["message_delete"] = is_yes(
-            self.delete_input.value
+        config["logs"]["message_delete"] = enabled(
+            self.message_delete
         )
 
-        config["logs"]["message_edit"] = is_yes(
-            self.edit_input.value
+        config["logs"]["message_edit"] = enabled(
+            self.message_edit
         )
 
-        member_logs = is_yes(
-            self.member_input.value
+        config["logs"]["member_join"] = enabled(
+            self.member_logs
         )
 
-        config["logs"]["member_join"] = member_logs
-        config["logs"]["member_leave"] = member_logs
-
-        moderation_logs = is_yes(
-            self.moderation_input.value
+        config["logs"]["member_leave"] = enabled(
+            self.member_logs
         )
 
-        config["logs"]["ban"] = moderation_logs
-        config["logs"]["kick"] = moderation_logs
-        config["logs"]["timeout"] = moderation_logs
+        config["logs"]["ban"] = enabled(
+            self.moderation_logs
+        )
 
-        save_config()
+        config["logs"]["kick"] = enabled(
+            self.moderation_logs
+        )
+
+        config["logs"]["timeout"] = enabled(
+            self.moderation_logs
+        )
+
+        save_configs()
 
         await interaction.response.send_message(
             f"{EMOJIS['yes']} Log ayarları kaydedildi.",
@@ -1979,870 +1483,525 @@ class LogsSettingsModal(
 
 
 # =========================================================
-# LOG CHANNEL
+# SES AYARLARI
 # =========================================================
 
-class LogsChannelSelect(
-    discord.ui.ChannelSelect
-):
-
+class VoiceSettingsView(discord.ui.View):
     def __init__(self):
+        super().__init__(timeout=300)
 
-        super().__init__(
-            placeholder="Log kanalını seç",
-            channel_types=[
-                discord.ChannelType.text
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_logs_channel"
-        )
-
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["logs"]["channel"] = str(
-            self.values[0].id
-        )
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Log kanalı "
-                f"{self.values[0].mention} olarak ayarlandı."
-            ),
-            view=None
-        )
-
-
-class LogsChannelView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            LogsChannelSelect()
-        )
-
-
-# =========================================================
-# VOICE MODAL
-# =========================================================
-
-class VoiceSettingsModal(
-    discord.ui.Modal,
-    title="Ses Bildirim Ayarları"
-):
-
-    join_input = discord.ui.TextInput(
-        label="Katılma mesajı",
-        default="{member} ses kanalına katıldı.",
-        required=True,
-        max_length=1000
+    @discord.ui.button(
+        label="Kanal",
+        style=discord.ButtonStyle.secondary
     )
-
-    leave_input = discord.ui.TextInput(
-        label="Ayrılma mesajı",
-        default="{member} ses kanalından ayrıldı.",
-        required=True,
-        max_length=1000
-    )
-
-    async def on_submit(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["voice"]["join_message"] = str(
-            self.join_input.value
-        )
-
-        config["voice"]["leave_message"] = str(
-            self.leave_input.value
-        )
-
-        save_config()
-
+    async def channel(self, interaction, button):
         await interaction.response.send_message(
-            f"{EMOJIS['yes']} Ses bildirim ayarları kaydedildi.",
+            "Ses bildirim kanalını seç:",
+            view=VoiceChannelView(),
             ephemeral=True
         )
 
-
-# =========================================================
-# VOICE CHANNEL
-# =========================================================
-
-class VoiceChannelSelect(
-    discord.ui.ChannelSelect
-):
-
-    def __init__(self):
-
-        super().__init__(
-            placeholder="Bildirim kanalını seç",
-            channel_types=[
-                discord.ChannelType.text
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_voice_channel"
-        )
-
-    async def callback(self, interaction):
-
-        config = get_config(
-            interaction.guild.id
-        )
-
-        config["voice"]["channel"] = str(
-            self.values[0].id
-        )
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Ses bildirim kanalı "
-                f"{self.values[0].mention} olarak ayarlandı."
-            ),
-            view=None
-        )
-
-
-class VoiceChannelView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=120
-        )
-
-        self.add_item(
-            VoiceChannelSelect()
-        )
-
-
-# =========================================================
-# SETTINGS MAIN VIEW
-# =========================================================
-
-class SettingsView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=300
-        )
-
     @discord.ui.button(
-        label="Ticket",
-        style=discord.ButtonStyle.primary,
-        row=0
-    )
-    async def ticket(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['support']} Ticket Ayarları",
-                "Ticket sistemini buradan yönet."
-            ),
-            view=TicketSettingsView()
-        )
-
-    @discord.ui.button(
-        label="Hoş Geldin",
-        style=discord.ButtonStyle.primary,
-        row=0
-    )
-    async def welcome(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['server']} Hoş Geldin Ayarları",
-                "Hoş geldin sistemini buradan yönet."
-            ),
-            view=WelcomeSettingsView()
-        )
-
-    @discord.ui.button(
-        label="Otorol",
-        style=discord.ButtonStyle.primary,
-        row=0
-    )
-    async def autorole(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['correct']} Otorol Ayarları",
-                "Yeni üyelerin alacağı rolü seç."
-            ),
-            view=AutoroleSettingsView()
-        )
-
-    @discord.ui.button(
-        label="Moderasyon",
-        style=discord.ButtonStyle.primary,
-        row=1
-    )
-    async def moderation(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['locked']} Moderasyon Ayarları",
-                "Moderasyon sistemini buradan yönet."
-            ),
-            view=ModerationSettingsView()
-        )
-
-    @discord.ui.button(
-        label="Log",
-        style=discord.ButtonStyle.primary,
-        row=1
-    )
-    async def logs(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['about']} Log Ayarları",
-                "Log sistemini buradan yönet."
-            ),
-            view=LogsSettingsView()
-        )
-
-    @discord.ui.button(
-        label="Ses",
-        style=discord.ButtonStyle.primary,
-        row=1
-    )
-    async def voice(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['discord']} Ses Ayarları",
-                "Ses bildirimlerini buradan yönet."
-            ),
-            view=VoiceSettingsView()
-        )
-
-    @discord.ui.button(
-        label="Dil",
-        style=discord.ButtonStyle.secondary,
-        row=2
-    )
-    async def language(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['settings']} Dil Ayarları",
-                "Botun dilini seç."
-            ),
-            view=LanguageView()
-        )
-
-    @discord.ui.button(
-        label="Sıfırla",
-        style=discord.ButtonStyle.danger,
-        row=2
-    )
-    async def reset(
-        self,
-        interaction,
-        button
-    ):
-
-        ALL_CONFIG[
-            str(interaction.guild.id)
-        ] = copy_data(
-            DEFAULT_CONFIG
-        )
-
-        save_config()
-
-        await interaction.response.edit_message(
-            content=(
-                f"{EMOJIS['yes']} Sunucu ayarları "
-                "varsayılan değerlere döndürüldü."
-            ),
-            embed=None,
-            view=None
-        )
-
-
-# =========================================================
-# TICKET SETTINGS
-# =========================================================
-
-class TicketSettingsView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=300
-        )
-
-    @discord.ui.button(
-        label="Panel Ayarları",
-        style=discord.ButtonStyle.primary,
-        row=0
-    )
-    async def panel(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.send_modal(
-            TicketSettingsModal()
-        )
-
-    @discord.ui.button(
-        label="Kategori Seç",
-        style=discord.ButtonStyle.secondary,
-        row=0
-    )
-    async def category(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Ticket kanallarının oluşturulacağı kategoriyi seç:",
-            embed=None,
-            view=TicketCategoryView()
-        )
-
-    @discord.ui.button(
-        label="Yetkili Rolü",
-        style=discord.ButtonStyle.secondary,
-        row=0
-    )
-    async def role(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Ticket yetkilisi olacak rolü seç:",
-            embed=None,
-            view=TicketRoleView()
-        )
-
-    @discord.ui.button(
-        label="Panel Kanalı",
-        style=discord.ButtonStyle.secondary,
-        row=1
-    )
-    async def panel_channel(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Ticket panelinin gönderileceği kanalı seç:",
-            embed=None,
-            view=TicketPanelChannelView()
-        )
-
-    @discord.ui.button(
-        label="Seçenekler",
-        style=discord.ButtonStyle.primary,
-        row=1
-    )
-    async def options(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Ticket seçeneklerini yönet:",
-            embed=None,
-            view=TicketOptionsView()
-        )
-
-    @discord.ui.button(
-        label="Paneli Gönder",
-        style=discord.ButtonStyle.success,
-        row=1
-    )
-    async def send_panel(
-        self,
-        interaction,
-        button
-    ):
-
-        await send_ticket_panel(
-            interaction
-        )
-
-    @discord.ui.button(
-        label="Geri",
-        style=discord.ButtonStyle.secondary,
-        row=2
-    )
-    async def back(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['settings']} Dynex Ayarları",
-                "Ayarlarını yönetmek için bir bölüm seç."
-            ),
-            view=SettingsView()
-        )
-
-
-# =========================================================
-# WELCOME SETTINGS
-# =========================================================
-
-class WelcomeSettingsView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=300
-        )
-
-    @discord.ui.button(
-        label="Mesaj Ayarları",
-        style=discord.ButtonStyle.primary,
-        row=0
-    )
-    async def settings(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.send_modal(
-            WelcomeSettingsModal()
-        )
-
-    @discord.ui.button(
-        label="Kanal Seç",
-        style=discord.ButtonStyle.secondary,
-        row=0
-    )
-    async def channel(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Hoş geldin mesajlarının gönderileceği kanalı seç:",
-            embed=None,
-            view=WelcomeChannelView()
-        )
-
-    @discord.ui.button(
-        label="Geri",
-        style=discord.ButtonStyle.secondary,
-        row=1
-    )
-    async def back(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['settings']} Dynex Ayarları",
-                "Ayarlarını yönetmek için bir bölüm seç."
-            ),
-            view=SettingsView()
-        )
-
-
-# =========================================================
-# AUTOROLE SETTINGS
-# =========================================================
-
-class AutoroleSettingsView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=300
-        )
-
-    @discord.ui.button(
-        label="Rol Seç",
+        label="Mesajlar",
         style=discord.ButtonStyle.primary
     )
-    async def role(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Yeni üyeye verilecek rolü seç:",
-            embed=None,
-            view=AutoroleView()
+    async def messages(self, interaction, button):
+        await interaction.response.send_modal(
+            VoiceModal()
         )
 
     @discord.ui.button(
         label="Geri",
         style=discord.ButtonStyle.secondary
     )
-    async def back(
-        self,
-        interaction,
-        button
-    ):
-
+    async def back(self, interaction, button):
         await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['settings']} Dynex Ayarları",
-                "Ayarlarını yönetmek için bir bölüm seç."
-            ),
+            content="**Dynex Ayarları**",
             view=SettingsView()
         )
 
 
-# =========================================================
-# MODERATION SETTINGS
-# =========================================================
-
-class ModerationSettingsView(
-    discord.ui.View
-):
-
+class VoiceChannelView(discord.ui.View):
     def __init__(self):
+        super().__init__(timeout=120)
 
-        super().__init__(
-            timeout=300
+        self.add_item(
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.text],
+                placeholder="Bildirim kanalını seç..."
+            )
+        )
+
+        self.children[0].callback = self.callback
+
+    async def callback(self, interaction):
+        channel = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["voice"]["channel_id"] = channel.id
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ses bildirim kanalı ayarlandı.",
+            ephemeral=True
+        )
+
+
+class VoiceModal(discord.ui.Modal, title="Ses Mesajları"):
+    join_message = discord.ui.TextInput(
+        label="Giriş mesajı",
+        default="{user} ses kanalına katıldı."
+    )
+
+    leave_message = discord.ui.TextInput(
+        label="Çıkış mesajı",
+        default="{user} ses kanalından ayrıldı."
+    )
+
+    async def on_submit(self, interaction):
+        config = get_config(interaction.guild.id)
+
+        config["voice"]["join_message"] = str(
+            self.join_message
+        )
+
+        config["voice"]["leave_message"] = str(
+            self.leave_message
+        )
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Ses mesajları kaydedildi.",
+            ephemeral=True
+        )
+
+
+# =========================================================
+# ÇEKİLİŞ AYARLARI
+# =========================================================
+
+class GiveawaySettingsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(
+        label="Yetkili Rolü",
+        style=discord.ButtonStyle.secondary
+    )
+    async def role(self, interaction, button):
+        await interaction.response.send_message(
+            "Çekiliş yetkili rolünü seç:",
+            view=GiveawayRoleView(),
+            ephemeral=True
         )
 
     @discord.ui.button(
-        label="Ceza Ayarları",
-        style=discord.ButtonStyle.primary,
-        row=0
+        label="Çekiliş Kanalı",
+        style=discord.ButtonStyle.secondary
     )
-    async def settings(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.send_modal(
-            ModerationSettingsModal()
+    async def channel(self, interaction, button):
+        await interaction.response.send_message(
+            "Çekiliş kanalını seç:",
+            view=GiveawayChannelView(),
+            ephemeral=True
         )
 
     @discord.ui.button(
         label="Log Kanalı",
-        style=discord.ButtonStyle.secondary,
-        row=0
+        style=discord.ButtonStyle.secondary
     )
-    async def channel(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Moderasyon log kanalını seç:",
-            embed=None,
-            view=ModerationChannelView()
+    async def log_channel(self, interaction, button):
+        await interaction.response.send_message(
+            "Çekiliş log kanalını seç:",
+            view=GiveawayLogChannelView(),
+            ephemeral=True
         )
 
     @discord.ui.button(
-        label="Geri",
-        style=discord.ButtonStyle.secondary,
-        row=1
+        label="Varsayılanlar",
+        style=discord.ButtonStyle.primary
     )
-    async def back(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['settings']} Dynex Ayarları",
-                "Ayarlarını yönetmek için bir bölüm seç."
-            ),
-            view=SettingsView()
-        )
-
-
-# =========================================================
-# LOG SETTINGS
-# =========================================================
-
-class LogsSettingsView(
-    discord.ui.View
-):
-
-    def __init__(self):
-
-        super().__init__(
-            timeout=300
-        )
-
-    @discord.ui.button(
-        label="Log Ayarları",
-        style=discord.ButtonStyle.primary,
-        row=0
-    )
-    async def settings(
-        self,
-        interaction,
-        button
-    ):
-
+    async def defaults(self, interaction, button):
         await interaction.response.send_modal(
-            LogsSettingsModal()
-        )
-
-    @discord.ui.button(
-        label="Log Kanalı",
-        style=discord.ButtonStyle.secondary,
-        row=0
-    )
-    async def channel(
-        self,
-        interaction,
-        button
-    ):
-
-        await interaction.response.edit_message(
-            content="Logların gönderileceği kanalı seç:",
-            embed=None,
-            view=LogsChannelView()
+            GiveawayDefaultsModal()
         )
 
     @discord.ui.button(
         label="Geri",
-        style=discord.ButtonStyle.secondary,
-        row=1
+        style=discord.ButtonStyle.secondary
     )
-    async def back(
-        self,
-        interaction,
-        button
-    ):
-
+    async def back(self, interaction, button):
         await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['settings']} Dynex Ayarları",
-                "Ayarlarını yönetmek için bir bölüm seç."
-            ),
+            content="**Dynex Ayarları**",
             view=SettingsView()
         )
 
 
-# =========================================================
-# VOICE SETTINGS
-# =========================================================
-
-class VoiceSettingsView(
-    discord.ui.View
-):
-
+class GiveawayRoleView(discord.ui.View):
     def __init__(self):
+        super().__init__(timeout=120)
 
-        super().__init__(
-            timeout=300
+        self.add_item(
+            discord.ui.RoleSelect(
+                placeholder="Çekiliş yetkili rolünü seç..."
+            )
         )
 
-    @discord.ui.button(
-        label="Mesaj Ayarları",
-        style=discord.ButtonStyle.primary,
-        row=0
-    )
-    async def settings(
-        self,
-        interaction,
-        button
-    ):
+        self.children[0].callback = self.callback
 
-        await interaction.response.send_modal(
-            VoiceSettingsModal()
+    async def callback(self, interaction):
+        role = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["giveaway"]["staff_role_id"] = role.id
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Çekiliş yetkili rolü ayarlandı.",
+            ephemeral=True
         )
 
-    @discord.ui.button(
-        label="Bildirim Kanalı",
-        style=discord.ButtonStyle.secondary,
-        row=0
-    )
-    async def channel(
-        self,
-        interaction,
-        button
-    ):
 
-        await interaction.response.edit_message(
-            content="Ses bildirimlerinin gönderileceği kanalı seç:",
-            embed=None,
-            view=VoiceChannelView()
+class GiveawayChannelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+        self.add_item(
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.text],
+                placeholder="Çekiliş kanalını seç..."
+            )
         )
 
-    @discord.ui.button(
-        label="Geri",
-        style=discord.ButtonStyle.secondary,
-        row=1
-    )
-    async def back(
-        self,
-        interaction,
-        button
-    ):
+        self.children[0].callback = self.callback
 
-        await interaction.response.edit_message(
-            content=None,
-            embed=make_embed(
-                f"{EMOJIS['settings']} Dynex Ayarları",
-                "Ayarlarını yönetmek için bir bölüm seç."
-            ),
-            view=SettingsView()
+    async def callback(self, interaction):
+        channel = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["giveaway"]["channel_id"] = channel.id
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Çekiliş kanalı ayarlandı.",
+            ephemeral=True
+        )
+
+
+class GiveawayLogChannelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+        self.add_item(
+            discord.ui.ChannelSelect(
+                channel_types=[discord.ChannelType.text],
+                placeholder="Çekiliş log kanalını seç..."
+            )
+        )
+
+        self.children[0].callback = self.callback
+
+    async def callback(self, interaction):
+        channel = self.children[0].values[0]
+
+        config = get_config(interaction.guild.id)
+        config["giveaway"]["log_channel_id"] = channel.id
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Çekiliş log kanalı ayarlandı.",
+            ephemeral=True
+        )
+
+
+class GiveawayDefaultsModal(
+    discord.ui.Modal,
+    title="Çekiliş Varsayılanları"
+):
+    winners = discord.ui.TextInput(
+        label="Varsayılan kazanan sayısı",
+        default="1",
+        max_length=2
+    )
+
+    duration = discord.ui.TextInput(
+        label="Varsayılan süre (dakika)",
+        default="10",
+        max_length=2
+    )
+
+    async def on_submit(self, interaction):
+        config = get_config(interaction.guild.id)
+
+        try:
+            winners = max(1, int(str(self.winners)))
+        except Exception:
+            winners = 1
+
+        try:
+            duration = max(
+                1,
+                min(40, int(str(self.duration)))
+            )
+        except Exception:
+            duration = 10
+
+        config["giveaway"]["default_winners"] = winners
+        config["giveaway"]["default_duration"] = duration
+
+        save_configs()
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Çekiliş varsayılanları kaydedildi.",
+            ephemeral=True
         )
 
 
 # =========================================================
-# /AYARLAR
+# ÇEKİLİŞ SİSTEMİ
+# =========================================================
+
+active_giveaways = {}
+
+
+class GiveawayView(discord.ui.View):
+    def __init__(self, giveaway_id):
+        super().__init__(timeout=None)
+        self.giveaway_id = giveaway_id
+
+    @discord.ui.button(
+        label="Çekilişe Katıl",
+        style=discord.ButtonStyle.success,
+        custom_id="dynex_giveaway_join"
+    )
+    async def join(self, interaction, button):
+        giveaway = active_giveaways.get(self.giveaway_id)
+
+        if not giveaway:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Bu çekiliş artık aktif değil.",
+                ephemeral=True
+            )
+            return
+
+        if interaction.user.id in giveaway["participants"]:
+            giveaway["participants"].remove(
+                interaction.user.id
+            )
+
+            await interaction.response.send_message(
+                "Çekilişten ayrıldın.",
+                ephemeral=True
+            )
+        else:
+            giveaway["participants"].add(
+                interaction.user.id
+            )
+
+            await interaction.response.send_message(
+                f"{EMOJIS['yes']} Çekilişe katıldın!",
+                ephemeral=True
+            )
+
+
+async def finish_giveaway(giveaway_id):
+    giveaway = active_giveaways.get(giveaway_id)
+
+    if not giveaway:
+        return
+
+    await asyncio.sleep(giveaway["duration"])
+
+    giveaway = active_giveaways.get(giveaway_id)
+
+    if not giveaway:
+        return
+
+    guild = bot.get_guild(giveaway["guild_id"])
+
+    if not guild:
+        active_giveaways.pop(giveaway_id, None)
+        return
+
+    channel = guild.get_channel(
+        giveaway["channel_id"]
+    )
+
+    if not channel:
+        active_giveaways.pop(giveaway_id, None)
+        return
+
+    participants = list(
+        giveaway["participants"]
+    )
+
+    if not participants:
+        await channel.send(
+            f"{EMOJIS['no']} Çekiliş bitti fakat katılımcı yoktu."
+        )
+
+        active_giveaways.pop(giveaway_id, None)
+        return
+
+    import random
+
+    count = min(
+        giveaway["winners"],
+        len(participants)
+    )
+
+    winners = random.sample(
+        participants,
+        count
+    )
+
+    mentions = " ".join(
+        f"<@{user_id}>"
+        for user_id in winners
+    )
+
+    embed = discord.Embed(
+        title="🎉 Çekiliş Bitti!",
+        description=(
+            f"**Ödül:** {giveaway['prize']}\n\n"
+            f"**Kazananlar:** {mentions}"
+        ),
+        color=discord.Color.green()
+    )
+
+    await channel.send(
+        content=mentions,
+        embed=embed
+    )
+
+    log_channel_id = get_config(
+        guild.id
+    )["giveaway"]["log_channel_id"]
+
+    if log_channel_id:
+        log_channel = guild.get_channel(
+            log_channel_id
+        )
+
+        if log_channel:
+            await log_channel.send(
+                f"🎉 Çekiliş bitti.\n"
+                f"Ödül: **{giveaway['prize']}**\n"
+                f"Kazananlar: {mentions}"
+            )
+
+    active_giveaways.pop(
+        giveaway_id,
+        None
+    )
+
+
+# =========================================================
+# SLASH: AYARLAR
 # =========================================================
 
 @bot.tree.command(
     name="ayarlar",
     description="Dynex sunucu ayarlarını yönet."
 )
-@app_commands.guild_only()
-@app_commands.default_permissions(
-    administrator=True
-)
-async def ayarlar(
-    interaction: discord.Interaction
-):
-
-    if not interaction.user.guild_permissions.administrator:
-
-        await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu komutu kullanmak için yönetici olmalısın.",
-            ephemeral=True
-        )
-
+@app_commands.default_permissions(administrator=True)
+async def ayarlar(interaction):
+    if not await admin_only(interaction):
         return
 
-    embed = make_embed(
-        f"{EMOJIS['settings']} Dynex Ayarları",
-        "Ayarlarını yönetmek için bir bölüm seç."
-    )
-
     await interaction.response.send_message(
-        embed=embed,
+        f"{EMOJIS['settings']} **Dynex Ayarları**\n"
+        "Aşağıdan ayarlamak istediğin sistemi seç.",
         view=SettingsView(),
         ephemeral=True
     )
 
 
 # =========================================================
-# /PING
+# SLASH: DİL
+# =========================================================
+
+class LanguageView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+        select = discord.ui.Select(
+            placeholder="Dil seç...",
+            options=[
+                discord.SelectOption(
+                    label="Türkçe",
+                    value="tr"
+                ),
+                discord.SelectOption(
+                    label="English",
+                    value="en"
+                )
+            ]
+        )
+
+        async def callback(interaction):
+            config = get_config(interaction.guild.id)
+            config["language"] = select.values[0]
+
+            save_configs()
+
+            await interaction.response.send_message(
+                f"{EMOJIS['yes']} Dil ayarlandı.",
+                ephemeral=True
+            )
+
+        select.callback = callback
+        self.add_item(select)
+
+
+@bot.tree.command(
+    name="dil",
+    description="Dynex dilini değiştir."
+)
+async def dil(interaction):
+    if not await admin_only(interaction):
+        return
+
+    await interaction.response.send_message(
+        "Dil seç:",
+        view=LanguageView(),
+        ephemeral=True
+    )
+
+
+# =========================================================
+# SLASH: BOT
 # =========================================================
 
 @bot.tree.command(
-    name="ping",
-    description="Botun gecikmesini göster."
+    name="bot",
+    description="Dynex botunun mevcut durumunu gösterir."
 )
-async def ping(
-    interaction: discord.Interaction
-):
-
-    latency = round(
-        bot.latency * 1000
+async def bot_status(interaction):
+    support_guild = bot.get_guild(
+        SUPPORT_SERVER_ID
     )
 
-    if latency < 80:
-        status = "Mükemmel"
-
-    elif latency < 150:
-        status = "İyi"
-
-    elif latency < 250:
-        status = "Orta"
-
-    elif latency < 400:
-        status = "Zayıf"
-
+    if support_guild:
+        support_members = support_guild.member_count
     else:
-        status = "Berbat"
+        support_members = "Bilinmiyor"
 
-    embed = make_embed(
-        f"{EMOJIS['dynex']} Dynex Bot Ping Durumu",
-        (
-            f"**Gecikme:** `{latency}ms`\n"
-            f"**Durum:** {status}"
-        )
+    embed = discord.Embed(
+        title="Dynex Durum",
+        color=discord.Color.black()
+    )
+
+    embed.description = (
+        f"**Sunucu sayısı:** {len(bot.guilds)}\n\n"
+        f"**Destek sunucusu üye sayısı:** {support_members}\n\n"
+        f"**Prefix yani . Komut:** `{PREFIX}`\n\n"
+        f"**Aktif kalma süresi:** {uptime_text()}"
     )
 
     await interaction.response.send_message(
@@ -2851,627 +2010,1033 @@ async def ping(
 
 
 # =========================================================
-# /BAN
+# SLASH: PING
+# =========================================================
+
+@bot.tree.command(
+    name="ping",
+    description="Dynex bağlantı durumunu gösterir."
+)
+async def ping(interaction):
+    latency = round(
+        bot.latency * 1000
+    )
+
+    if latency <= 80:
+        status = "Mükemmel"
+    elif latency <= 150:
+        status = "İyi"
+    elif latency <= 250:
+        status = "Orta"
+    elif latency <= 400:
+        status = "Zayıf"
+    else:
+        status = "Berbat"
+
+    embed = discord.Embed(
+        title="İttifak Ordusu Botunun Ping(internet) Durumu",
+        description=(
+            f"**Ping:** `{latency}ms`\n"
+            f"**Durum:** `{status}`"
+        ),
+        color=discord.Color.blue()
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# SLASH: SUNUCU
+# =========================================================
+
+@bot.tree.command(
+    name="sunucu",
+    description="Sunucu bilgilerini gösterir."
+)
+async def server_info(interaction):
+    guild = interaction.guild
+
+    if not guild:
+        return
+
+    embed = discord.Embed(
+        title=f"{guild.name}",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="Sunucu ID",
+        value=str(guild.id),
+        inline=False
+    )
+
+    embed.add_field(
+        name="Üye sayısı",
+        value=str(guild.member_count),
+        inline=True
+    )
+
+    embed.add_field(
+        name="Kanal sayısı",
+        value=str(len(guild.channels)),
+        inline=True
+    )
+
+    embed.add_field(
+        name="Rol sayısı",
+        value=str(len(guild.roles)),
+        inline=True
+    )
+
+    if guild.icon:
+        embed.set_thumbnail(
+            url=guild.icon.url
+        )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# SLASH: KULLANICI
+# =========================================================
+
+@bot.tree.command(
+    name="kullanıcı",
+    description="Kullanıcı bilgilerini gösterir."
+)
+@app_commands.describe(
+    kullanıcı="Bilgileri gösterilecek kullanıcı."
+)
+async def user_info(
+    interaction,
+    kullanıcı: discord.Member = None
+):
+    user = kullanıcı or interaction.user
+
+    embed = discord.Embed(
+        title="Kullanıcı Bilgileri",
+        color=discord.Color.blurple()
+    )
+
+    embed.set_thumbnail(
+        url=user.display_avatar.url
+    )
+
+    embed.add_field(
+        name="Kullanıcı",
+        value=user.mention,
+        inline=False
+    )
+
+    embed.add_field(
+        name="ID",
+        value=str(user.id),
+        inline=False
+    )
+
+    embed.add_field(
+        name="Hesap",
+        value=discord.utils.format_dt(
+            user.created_at,
+            "F"
+        ),
+        inline=False
+    )
+
+    if isinstance(user, discord.Member):
+        embed.add_field(
+            name="Sunucuya katılma",
+            value=discord.utils.format_dt(
+                user.joined_at,
+                "F"
+            ),
+            inline=False
+        )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# SLASH: AVATAR
+# =========================================================
+
+@bot.tree.command(
+    name="avatar",
+    description="Kullanıcının avatarını gösterir."
+)
+@app_commands.describe(
+    kullanıcı="Avatarı gösterilecek kullanıcı."
+)
+async def avatar(
+    interaction,
+    kullanıcı: discord.User = None
+):
+    user = kullanıcı or interaction.user
+
+    embed = discord.Embed(
+        title=f"{user.display_name} Avatarı",
+        color=discord.Color.blurple()
+    )
+
+    embed.set_image(
+        url=user.display_avatar.url
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# SLASH: TEMİZLE
+# =========================================================
+
+@bot.tree.command(
+    name="temizle",
+    description="Belirtilen miktarda mesaj siler."
+)
+@app_commands.describe(
+    miktar="Silinecek mesaj miktarı."
+)
+@app_commands.default_permissions(manage_messages=True)
+async def temizle(
+    interaction,
+    miktar: app_commands.Range[int, 1, 100]
+):
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Mesajları yönet yetkin yok.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(
+        ephemeral=True
+    )
+
+    deleted = await interaction.channel.purge(
+        limit=miktar
+    )
+
+    await interaction.followup.send(
+        f"{EMOJIS['yes']} **{len(deleted)}** mesaj silindi.",
+        ephemeral=True
+    )
+
+
+# =========================================================
+# SLASH: BAN
 # =========================================================
 
 @bot.tree.command(
     name="ban",
-    description="Bir kullanıcıyı yasakla."
+    description="Kullanıcıyı sunucudan yasaklar."
 )
 @app_commands.describe(
-    member="Yasaklanacak kullanıcı",
-    reason="Sebep"
+    kullanıcı="Yasaklanacak kullanıcı.",
+    sebep="Yasaklama sebebi."
 )
-@app_commands.default_permissions(
-    ban_members=True
-)
+@app_commands.default_permissions(ban_members=True)
 async def ban(
-    interaction: discord.Interaction,
-    member: discord.Member,
-    reason: str = "Belirtilmedi"
+    interaction,
+    kullanıcı: discord.Member,
+    sebep: str = "Sebep belirtilmedi."
 ):
-
-    if member == interaction.user:
-
+    if not interaction.user.guild_permissions.ban_members:
         await interaction.response.send_message(
-            f"{EMOJIS['no']} Kendini yasaklayamazsın.",
+            f"{EMOJIS['no']} Ban yetkin yok.",
             ephemeral=True
         )
+        return
 
+    if kullanıcı == interaction.user:
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Kendini banlayamazsın.",
+            ephemeral=True
+        )
         return
 
     try:
-
-        await member.ban(
-            reason=reason
-        )
+        await kullanıcı.ban(reason=sebep)
 
         await interaction.response.send_message(
-            f"{EMOJIS['yes']} {member.mention} yasaklandı."
+            f"{EMOJIS['yes']} {kullanıcı.mention} yasaklandı.\n"
+            f"**Sebep:** {sebep}"
         )
 
-        config = get_config(
-            interaction.guild.id
+        await send_log(
+            interaction.guild,
+            f"🔨 {kullanıcı} banlandı.\nSebep: {sebep}",
+            "ban"
         )
 
-        if config["logs"].get("ban"):
-
-            await send_log(
-                interaction.guild,
-                make_embed(
-                    "Ban",
-                    (
-                        f"**Kullanıcı:** {member.mention}\n"
-                        f"**Yetkili:** {interaction.user.mention}\n"
-                        f"**Sebep:** {reason}"
-                    ),
-                    0xED4245
-                )
-            )
-
-    except discord.Forbidden:
-
+    except Exception:
         await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu kullanıcıyı yasaklayamıyorum.",
+            f"{EMOJIS['no']} Kullanıcı banlanamadı.",
             ephemeral=True
         )
 
 
 # =========================================================
-# /KICK
+# SLASH: KICK
 # =========================================================
 
 @bot.tree.command(
     name="kick",
-    description="Bir kullanıcıyı sunucudan at."
+    description="Kullanıcıyı sunucudan atar."
 )
 @app_commands.describe(
-    member="Atılacak kullanıcı",
-    reason="Sebep"
+    kullanıcı="Atılacak kullanıcı.",
+    sebep="Atılma sebebi."
 )
-@app_commands.default_permissions(
-    kick_members=True
-)
+@app_commands.default_permissions(kick_members=True)
 async def kick(
-    interaction: discord.Interaction,
-    member: discord.Member,
-    reason: str = "Belirtilmedi"
+    interaction,
+    kullanıcı: discord.Member,
+    sebep: str = "Sebep belirtilmedi."
 ):
+    if not interaction.user.guild_permissions.kick_members:
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Kick yetkin yok.",
+            ephemeral=True
+        )
+        return
 
     try:
-
-        await member.kick(
-            reason=reason
-        )
+        await kullanıcı.kick(reason=sebep)
 
         await interaction.response.send_message(
-            f"{EMOJIS['yes']} {member.mention} sunucudan atıldı."
+            f"{EMOJIS['yes']} {kullanıcı.mention} sunucudan atıldı.\n"
+            f"**Sebep:** {sebep}"
         )
 
-        config = get_config(
-            interaction.guild.id
+        await send_log(
+            interaction.guild,
+            f"👢 {kullanıcı} kicklendi.\nSebep: {sebep}",
+            "kick"
         )
 
-        if config["logs"].get("kick"):
-
-            await send_log(
-                interaction.guild,
-                make_embed(
-                    "Kick",
-                    (
-                        f"**Kullanıcı:** {member.mention}\n"
-                        f"**Yetkili:** {interaction.user.mention}\n"
-                        f"**Sebep:** {reason}"
-                    ),
-                    0xFEE75C
-                )
-            )
-
-    except discord.Forbidden:
-
+    except Exception:
         await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu kullanıcıyı atamıyorum.",
+            f"{EMOJIS['no']} Kullanıcı kicklenemedi.",
             ephemeral=True
         )
 
 
 # =========================================================
-# /TIMEOUT
+# SLASH: TIMEOUT
 # =========================================================
 
 @bot.tree.command(
     name="timeout",
-    description="Bir kullanıcıyı sustur."
+    description="Kullanıcıya timeout verir."
 )
 @app_commands.describe(
-    member="Susturulacak kullanıcı",
-    minutes="Dakika",
-    reason="Sebep"
+    kullanıcı="Timeout verilecek kullanıcı.",
+    dakika="Timeout süresi.",
+    sebep="Sebep."
 )
-@app_commands.default_permissions(
-    moderate_members=True
-)
+@app_commands.default_permissions(moderate_members=True)
 async def timeout(
-    interaction: discord.Interaction,
-    member: discord.Member,
-    minutes: int,
-    reason: str = "Belirtilmedi"
+    interaction,
+    kullanıcı: discord.Member,
+    dakika: app_commands.Range[int, 1, 40320],
+    sebep: str = "Sebep belirtilmedi."
 ):
-
-    if minutes < 1:
-
+    if not interaction.user.guild_permissions.moderate_members:
         await interaction.response.send_message(
-            f"{EMOJIS['no']} Süre en az 1 dakika olmalı.",
+            f"{EMOJIS['no']} Timeout yetkin yok.",
             ephemeral=True
         )
-
-        return
-
-    if minutes > 40320:
-
-        await interaction.response.send_message(
-            f"{EMOJIS['no']} Süre en fazla 28 gün olabilir.",
-            ephemeral=True
-        )
-
         return
 
     try:
-
-        until = (
-            discord.utils.utcnow()
-            + timedelta(minutes=minutes)
-        )
-
-        await member.timeout(
-            until,
-            reason=reason
+        await kullanıcı.timeout(
+            timedelta(minutes=dakika),
+            reason=sebep
         )
 
         await interaction.response.send_message(
-            (
-                f"{EMOJIS['yes']} {member.mention} "
-                f"{minutes} dakika susturuldu."
-            )
+            f"{EMOJIS['yes']} {kullanıcı.mention} "
+            f"**{dakika} dakika** timeout aldı.\n"
+            f"**Sebep:** {sebep}"
         )
 
-        config = get_config(
-            interaction.guild.id
+        await send_log(
+            interaction.guild,
+            f"⏱️ {kullanıcı} timeout aldı.\n"
+            f"Süre: {dakika} dakika\n"
+            f"Sebep: {sebep}",
+            "timeout"
         )
 
-        if config["logs"].get("timeout"):
-
-            await send_log(
-                interaction.guild,
-                make_embed(
-                    "Timeout",
-                    (
-                        f"**Kullanıcı:** {member.mention}\n"
-                        f"**Yetkili:** {interaction.user.mention}\n"
-                        f"**Süre:** {minutes} dakika\n"
-                        f"**Sebep:** {reason}"
-                    )
-                )
-            )
-
-    except discord.Forbidden:
-
+    except Exception:
         await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu kullanıcıyı susturamıyorum.",
+            f"{EMOJIS['no']} Timeout verilemedi.",
             ephemeral=True
         )
 
 
 # =========================================================
-# MESSAGE
+# SLASH: UYAR
+# =========================================================
+
+@bot.tree.command(
+    name="uyar",
+    description="Kullanıcıya uyarı verir."
+)
+@app_commands.describe(
+    kullanıcı="Uyarılacak kullanıcı.",
+    sebep="Uyarı sebebi."
+)
+@app_commands.default_permissions(moderate_members=True)
+async def warn(
+    interaction,
+    kullanıcı: discord.Member,
+    sebep: str = "Sebep belirtilmedi."
+):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Bu işlem için yetkin yok.",
+            ephemeral=True
+        )
+        return
+
+    count = add_warning(
+        interaction.guild.id,
+        kullanıcı.id,
+        sebep,
+        interaction.user.id
+    )
+
+    config = get_config(
+        interaction.guild.id
+    )
+
+    limit = config["moderation"]["max_warnings"]
+
+    await interaction.response.send_message(
+        f"{EMOJIS['yes']} {kullanıcı.mention} uyarıldı.\n"
+        f"**Sebep:** {sebep}\n"
+        f"**Uyarı:** `{count}/{limit}`"
+    )
+
+    if count >= limit:
+        action = config["moderation"]["warning_action"]
+
+        if action == "timeout":
+            try:
+                await kullanıcı.timeout(
+                    timedelta(
+                        minutes=config["moderation"]["timeout_minutes"]
+                    ),
+                    reason="Uyarı limiti doldu."
+                )
+            except Exception:
+                pass
+
+
+# =========================================================
+# SLASH: UYARILAR
+# =========================================================
+
+@bot.tree.command(
+    name="uyarılar",
+    description="Kullanıcının uyarılarını gösterir."
+)
+@app_commands.describe(
+    kullanıcı="Uyarıları gösterilecek kullanıcı."
+)
+async def warnings(
+    interaction,
+    kullanıcı: discord.Member = None
+):
+    user = kullanıcı or interaction.user
+
+    config = get_config(
+        interaction.guild.id
+    )
+
+    data = config["warnings"].get(
+        str(user.id),
+        []
+    )
+
+    if not data:
+        await interaction.response.send_message(
+            f"{EMOJIS['correct']} {user.mention} için kayıtlı uyarı yok.",
+            ephemeral=True
+        )
+        return
+
+    lines = []
+
+    for i, warning in enumerate(data[-10:], 1):
+        lines.append(
+            f"**{i}.** {warning['reason']}"
+        )
+
+    embed = discord.Embed(
+        title=f"{user.display_name} Uyarıları",
+        description="\n".join(lines),
+        color=discord.Color.orange()
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# SLASH: ÇEKİLİŞ
+# =========================================================
+
+@bot.tree.command(
+    name="çekiliş",
+    description="Yeni bir çekiliş başlatır."
+)
+@app_commands.describe(
+    ödül="Çekiliş ödülü.",
+    kazanan="Kazanan sayısı.",
+    süre="Süre, dakika cinsinden. En fazla 40."
+)
+async def giveaway(
+    interaction,
+    ödül: str,
+    kazanan: app_commands.Range[int, 1, 20],
+    süre: app_commands.Range[int, 1, 40]
+):
+    config = get_config(
+        interaction.guild.id
+    )
+
+    staff_role_id = config["giveaway"]["staff_role_id"]
+
+    if staff_role_id:
+        role = interaction.guild.get_role(
+            staff_role_id
+        )
+
+        if role and role not in interaction.user.roles:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Bu komutu kullanmak için "
+                f"{role.mention} rolüne sahip olmalısın.",
+                ephemeral=True
+            )
+            return
+
+    if not staff_role_id:
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Çekiliş yetkili rolü ayarlanmamış.",
+                ephemeral=True
+            )
+            return
+
+    channel = interaction.channel
+
+    if config["giveaway"]["channel_id"]:
+        configured_channel = interaction.guild.get_channel(
+            config["giveaway"]["channel_id"]
+        )
+
+        if configured_channel:
+            channel = configured_channel
+
+    giveaway_id = (
+        f"{interaction.guild.id}-"
+        f"{channel.id}-"
+        f"{int(datetime.now().timestamp())}"
+    )
+
+    active_giveaways[giveaway_id] = {
+        "guild_id": interaction.guild.id,
+        "channel_id": channel.id,
+        "prize": ödül,
+        "winners": kazanan,
+        "duration": süre * 60,
+        "participants": set()
+    }
+
+    embed = discord.Embed(
+        title="🎉 Çekiliş",
+        description=(
+            f"**Ödül:** {ödül}\n"
+            f"**Kazanan:** {kazanan} kişi\n"
+            f"**Süre:** {süre} dakika\n\n"
+            "Katılmak için aşağıdaki butona bas!"
+        ),
+        color=discord.Color.blurple()
+    )
+
+    await interaction.response.send_message(
+        f"{EMOJIS['yes']} Çekiliş oluşturuldu.",
+        ephemeral=True
+    )
+
+    await channel.send(
+        embed=embed,
+        view=GiveawayView(giveaway_id)
+    )
+
+    asyncio.create_task(
+        finish_giveaway(giveaway_id)
+    )
+
+
+# =========================================================
+# SLASH: ÇEKİLİŞ BİTİR
+# =========================================================
+
+@bot.tree.command(
+    name="çekiliş-bitir",
+    description="Aktif çekilişi bitirir."
+)
+async def giveaway_end(interaction):
+    config = get_config(
+        interaction.guild.id
+    )
+
+    staff_role_id = config["giveaway"]["staff_role_id"]
+
+    if staff_role_id:
+        role = interaction.guild.get_role(
+            staff_role_id
+        )
+
+        if role and role not in interaction.user.roles:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Çekiliş yetkin yok.",
+                ephemeral=True
+            )
+            return
+
+    found = None
+
+    for gid, data in active_giveaways.items():
+        if data["guild_id"] == interaction.guild.id:
+            found = gid
+            break
+
+    if not found:
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Aktif çekiliş bulunamadı.",
+            ephemeral=True
+        )
+        return
+
+    data = active_giveaways[found]
+
+    import random
+
+    participants = list(
+        data["participants"]
+    )
+
+    if not participants:
+        active_giveaways.pop(found, None)
+
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Çekilişte katılımcı yoktu."
+        )
+        return
+
+    winners_count = min(
+        data["winners"],
+        len(participants)
+    )
+
+    winners = random.sample(
+        participants,
+        winners_count
+    )
+
+    mentions = " ".join(
+        f"<@{x}>"
+        for x in winners
+    )
+
+    active_giveaways.pop(
+        found,
+        None
+    )
+
+    await interaction.response.send_message(
+        f"🎉 Çekiliş bitti!\n\n"
+        f"**Ödül:** {data['prize']}\n"
+        f"**Kazananlar:** {mentions}"
+    )
+
+
+# =========================================================
+# SLASH: DUYURU
+# =========================================================
+
+class AnnouncementModal(
+    discord.ui.Modal,
+    title="Duyuru"
+):
+    title_input = discord.ui.TextInput(
+        label="Başlık",
+        max_length=100
+    )
+
+    description_input = discord.ui.TextInput(
+        label="Açıklama",
+        style=discord.TextStyle.paragraph,
+        max_length=4000
+    )
+
+    async def on_submit(self, interaction):
+        embed = discord.Embed(
+            title=str(self.title_input),
+            description=str(self.description_input),
+            color=discord.Color.blurple()
+        )
+
+        await interaction.channel.send(
+            embed=embed
+        )
+
+        await interaction.response.send_message(
+            f"{EMOJIS['yes']} Duyuru gönderildi.",
+            ephemeral=True
+        )
+
+
+@bot.tree.command(
+    name="duyuru",
+    description="Embed duyuru gönderir."
+)
+@app_commands.default_permissions(manage_messages=True)
+async def duyuru(interaction):
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message(
+            f"{EMOJIS['no']} Bu işlem için yetkin yok.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_modal(
+        AnnouncementModal()
+    )
+
+
+# =========================================================
+# SLASH: ROLLER
+# =========================================================
+
+@bot.tree.command(
+    name="roller",
+    description="Sunucudaki rolleri listeler."
+)
+async def roller(interaction):
+    roles = [
+        role for role in interaction.guild.roles
+        if role != interaction.guild.default_role
+    ]
+
+    roles.reverse()
+
+    if not roles:
+        await interaction.response.send_message(
+            "Sunucuda rol bulunmuyor."
+        )
+        return
+
+    text = "\n".join(
+        f"{role.mention} — `{role.id}`"
+        for role in roles[:50]
+    )
+
+    embed = discord.Embed(
+        title="Sunucu Rolleri",
+        description=text,
+        color=discord.Color.blurple()
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# EVENT: READY
 # =========================================================
 
 @bot.event
-async def on_message(message):
+async def on_ready():
+    print(
+        f"Dynex aktif: {bot.user} "
+        f"| {len(bot.guilds)} sunucu"
+    )
 
+
+# =========================================================
+# EVENT: ÜYE GİRİŞ
+# =========================================================
+
+@bot.event
+async def on_member_join(member):
+    config = get_config(
+        member.guild.id
+    )
+
+    # Oto rol
+    role_id = config["autorole"]["role_id"]
+
+    if role_id:
+        role = member.guild.get_role(role_id)
+
+        if role:
+            try:
+                await member.add_roles(role)
+            except Exception:
+                pass
+
+    # Karşılama
+    welcome = config["welcome"]
+
+    channel_id = welcome["channel_id"]
+
+    if channel_id:
+        channel = member.guild.get_channel(
+            channel_id
+        )
+
+        if channel:
+            description = welcome["description"]
+
+            description = description.replace(
+                "{user}",
+                member.mention
+            )
+
+            description = description.replace(
+                "{username}",
+                member.display_name
+            )
+
+            embed = discord.Embed(
+                title=welcome["title"],
+                description=description,
+                color=discord.Color.green()
+            )
+
+            if welcome["image"]:
+                embed.set_image(
+                    url=welcome["image"]
+                )
+
+            try:
+                await channel.send(
+                    embed=embed
+                )
+            except Exception:
+                pass
+
+    # DM
+    if welcome["dm_enabled"] and welcome["dm_message"]:
+        try:
+            message = welcome["dm_message"].replace(
+                "{user}",
+                member.mention
+            )
+
+            await member.send(message)
+        except Exception:
+            pass
+
+    await send_log(
+        member.guild,
+        f"📥 {member.mention} sunucuya katıldı.",
+        "member_join"
+    )
+
+
+# =========================================================
+# EVENT: ÜYE ÇIKIŞ
+# =========================================================
+
+@bot.event
+async def on_member_remove(member):
+    await send_log(
+        member.guild,
+        f"📤 **{member}** sunucudan ayrıldı.",
+        "member_leave"
+    )
+
+
+# =========================================================
+# EVENT: MESAJ
+# =========================================================
+
+spam_cache = {}
+
+
+@bot.event
+async def on_message(message):
     if message.author.bot:
         return
 
     if not message.guild:
-
-        await bot.process_commands(
-            message
-        )
-
         return
 
     config = get_config(
         message.guild.id
     )
 
-    moderation = config["moderation"]
+    content = message.content.lower()
 
-    # LINK FILTER
-    if moderation.get(
-        "anti_link"
-    ):
-
-        content = message.content.lower()
-
-        blocked = (
-            "http://",
-            "https://",
-            "discord.gg/",
-            "www."
-        )
-
-        if any(
-            item in content
-            for item in blocked
-        ):
-
+    # Yasaklı kelime
+    for word in config["moderation"]["bad_words"]:
+        if word.lower() in content:
             try:
                 await message.delete()
             except Exception:
                 pass
 
-            try:
+            count = add_warning(
+                message.guild.id,
+                message.author.id,
+                "Yasaklı kelime kullanımı.",
+                bot.user.id
+            )
 
+            try:
                 await message.channel.send(
-                    (
-                        f"{EMOJIS['no']} "
-                        f"{message.author.mention}, "
-                        "link paylaşamazsın."
-                    ),
+                    f"{EMOJIS['no']} {message.author.mention} "
+                    "yasaklı kelime kullanamazsın.",
                     delete_after=5
                 )
-
             except Exception:
                 pass
 
-            return
+            if count >= config["moderation"]["max_warnings"]:
+                try:
+                    await message.author.timeout(
+                        timedelta(
+                            minutes=config["moderation"]["timeout_minutes"]
+                        ),
+                        reason="Uyarı limiti doldu."
+                    )
+                except Exception:
+                    pass
 
-    # BAD WORDS
-    words = moderation.get(
-        "bad_words",
-        []
-    )
+            break
 
-    content_lower = message.content.lower()
+    # Anti-link
+    if config["moderation"]["anti_link"]:
+        links = [
+            "http://",
+            "https://",
+            "discord.gg/",
+            "www."
+        ]
 
-    if words and any(
-        word in content_lower
-        for word in words
-    ):
+        if any(x in content for x in links):
+            if not message.author.guild_permissions.manage_messages:
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
 
-        try:
-            await message.delete()
-        except Exception:
-            pass
+                try:
+                    await message.channel.send(
+                        f"{EMOJIS['no']} {message.author.mention} "
+                        "link göndermek yasak.",
+                        delete_after=5
+                    )
+                except Exception:
+                    pass
 
-        try:
+    # Basit anti-spam
+    if config["moderation"]["anti_spam"]:
+        now = datetime.now(
+            timezone.utc
+        ).timestamp()
 
-            await message.channel.send(
-                (
-                    f"{EMOJIS['no']} "
-                    f"{message.author.mention}, "
-                    "bu kelimeyi kullanamazsın."
-                ),
-                delete_after=5
-            )
+        key = (
+            message.guild.id,
+            message.author.id
+        )
 
-        except Exception:
-            pass
+        if key not in spam_cache:
+            spam_cache[key] = []
 
-        return
+        spam_cache[key].append(now)
 
-    await bot.process_commands(
-        message
-    )
+        spam_cache[key] = [
+            x for x in spam_cache[key]
+            if now - x <= 5
+        ]
+
+        if len(spam_cache[key]) >= 6:
+            try:
+                await message.author.timeout(
+                    timedelta(minutes=1),
+                    reason="Anti-spam"
+                )
+            except Exception:
+                pass
+
+            spam_cache[key] = []
+
+    await bot.process_commands(message)
 
 
 # =========================================================
-# MESSAGE DELETE
+# EVENT: MESAJ SİLME
 # =========================================================
 
 @bot.event
 async def on_message_delete(message):
-
-    if not message.guild:
-        return
-
     if message.author.bot:
         return
 
-    config = get_config(
-        message.guild.id
-    )
-
-    if not config["logs"].get(
-        "message_delete",
-        True
-    ):
-        return
-
-    content = (
-        message.content
-        or "Mesaj içeriği yok."
-    )
-
-    await send_log(
-        message.guild,
-        make_embed(
-            "Mesaj Silindi",
-            (
-                f"**Kullanıcı:** {message.author.mention}\n"
-                f"**Kanal:** {message.channel.mention}\n"
-                f"**İçerik:** {content[:1500]}"
-            ),
-            0xED4245
+    if message.guild:
+        await send_log(
+            message.guild,
+            f"🗑️ **Mesaj silindi**\n"
+            f"**Kullanıcı:** {message.author.mention}\n"
+            f"**Kanal:** {message.channel.mention}\n"
+            f"**Mesaj:** {message.content[:1000]}",
+            "message_delete"
         )
-    )
 
 
 # =========================================================
-# MESSAGE EDIT
+# EVENT: MESAJ DÜZENLEME
 # =========================================================
 
 @bot.event
-async def on_message_edit(
-    before,
-    after
-):
-
-    if not before.guild:
-        return
-
+async def on_message_edit(before, after):
     if before.author.bot:
         return
 
     if before.content == after.content:
         return
 
-    config = get_config(
-        before.guild.id
-    )
-
-    if not config["logs"].get(
-        "message_edit",
-        True
-    ):
-        return
-
-    await send_log(
-        before.guild,
-        make_embed(
-            "Mesaj Düzenlendi",
-            (
-                f"**Kullanıcı:** {before.author.mention}\n"
-                f"**Kanal:** {before.channel.mention}\n\n"
-                f"**Önce:** {before.content[:700]}\n"
-                f"**Sonra:** {after.content[:700]}"
-            ),
-            0xFEE75C
-        )
-    )
-
-
-# =========================================================
-# MEMBER JOIN
-# =========================================================
-
-@bot.event
-async def on_member_join(member):
-
-    config = get_config(
-        member.guild.id
-    )
-
-    # AUTOROLE
-    role_id = config["autorole"].get(
-        "role"
-    )
-
-    if role_id:
-
-        try:
-
-            role = member.guild.get_role(
-                int(role_id)
-            )
-
-            if role:
-
-                await member.add_roles(
-                    role,
-                    reason="Dynex Otorol"
-                )
-
-        except Exception:
-
-            pass
-
-    # WELCOME
-    welcome = config["welcome"]
-
-    channel = get_text_channel(
-        member.guild,
-        welcome.get("channel")
-    )
-
-    if channel:
-
-        embed = make_embed(
-            welcome.get(
-                "title",
-                "Hoş Geldin!"
-            ),
-            replace_variables(
-                welcome.get(
-                    "description",
-                    ""
-                ),
-                member
-            ),
-            welcome.get(
-                "color",
-                5793266
-            )
-        )
-
-        if welcome.get(
-            "image_url"
-        ):
-
-            embed.set_image(
-                url=welcome["image_url"]
-            )
-
-        if welcome.get(
-            "thumbnail_url"
-        ):
-
-            embed.set_thumbnail(
-                url=welcome["thumbnail_url"]
-            )
-
-        extra = []
-
-        if welcome.get(
-            "show_member"
-        ):
-
-            extra.append(
-                f"**Üye:** {member.mention}"
-            )
-
-        if welcome.get(
-            "show_username"
-        ):
-
-            extra.append(
-                f"**Kullanıcı:** `{member.name}`"
-            )
-
-        if welcome.get(
-            "show_id"
-        ):
-
-            extra.append(
-                f"**ID:** `{member.id}`"
-            )
-
-        if welcome.get(
-            "show_server"
-        ):
-
-            extra.append(
-                f"**Sunucu:** `{member.guild.name}`"
-            )
-
-        if welcome.get(
-            "show_member_count"
-        ):
-
-            extra.append(
-                (
-                    f"**Üye sayısı:** "
-                    f"`{member.guild.member_count}`"
-                )
-            )
-
-        if extra:
-
-            embed.add_field(
-                name="Bilgiler",
-                value="\n".join(extra),
-                inline=False
-            )
-
-        try:
-
-            await channel.send(
-                content=replace_variables(
-                    welcome.get(
-                        "message",
-                        ""
-                    ),
-                    member
-                ),
-                embed=embed
-            )
-
-        except Exception:
-
-            pass
-
-    # JOIN LOG
-    if config["logs"].get(
-        "member_join",
-        True
-    ):
-
+    if before.guild:
         await send_log(
-            member.guild,
-            make_embed(
-                "Üye Katıldı",
-                (
-                    f"**Kullanıcı:** {member.mention}\n"
-                    f"**ID:** `{member.id}`"
-                ),
-                0x57F287
-            )
+            before.guild,
+            f"✏️ **Mesaj düzenlendi**\n"
+            f"**Kullanıcı:** {before.author.mention}\n"
+            f"**Kanal:** {before.channel.mention}\n"
+            f"**Eski:** {before.content[:500]}\n"
+            f"**Yeni:** {after.content[:500]}",
+            "message_edit"
         )
 
-    # DM
-    if welcome.get(
-        "dm_enabled"
-    ):
-
-        try:
-
-            await member.send(
-                replace_variables(
-                    welcome.get(
-                        "dm_message",
-                        ""
-                    ),
-                    member
-                )
-            )
-
-        except Exception:
-
-            pass
-
 
 # =========================================================
-# MEMBER REMOVE
-# =========================================================
-
-@bot.event
-async def on_member_remove(member):
-
-    config = get_config(
-        member.guild.id
-    )
-
-    if not config["logs"].get(
-        "member_leave",
-        True
-    ):
-        return
-
-    await send_log(
-        member.guild,
-        make_embed(
-            "Üye Ayrıldı",
-            (
-                f"**Kullanıcı:** `{member}`\n"
-                f"**ID:** `{member.id}`"
-            ),
-            0xED4245
-        )
-    )
-
-
-# =========================================================
-# VOICE
+# EVENT: SES
 # =========================================================
 
 @bot.event
@@ -3480,107 +3045,83 @@ async def on_voice_state_update(
     before,
     after
 ):
+    if before.channel == after.channel:
+        return
 
     config = get_config(
         member.guild.id
     )
 
-    channel = get_text_channel(
-        member.guild,
-        config["voice"].get("channel")
-    )
+    channel_id = config["voice"]["channel_id"]
 
-    if not channel:
+    if not channel_id:
         return
 
-    if (
-        before.channel is None
-        and after.channel is not None
-    ):
-
-        message = replace_variables(
-            config["voice"].get(
-                "join_message",
-                "{member} ses kanalına katıldı."
-            ),
-            member
-        )
-
-        try:
-
-            await channel.send(
-                f"{EMOJIS['discord']} {message}\n"
-                f"**Kanal:** {after.channel.mention}"
-            )
-
-        except Exception:
-
-            pass
-
-    elif (
-        before.channel is not None
-        and after.channel is None
-    ):
-
-        message = replace_variables(
-            config["voice"].get(
-                "leave_message",
-                "{member} ses kanalından ayrıldı."
-            ),
-            member
-        )
-
-        try:
-
-            await channel.send(
-                f"{EMOJIS['discord']} {message}\n"
-                f"**Kanal:** {before.channel.mention}"
-            )
-
-        except Exception:
-
-            pass
-
-
-# =========================================================
-# READY
-# =========================================================
-
-@bot.event
-async def on_ready():
-
-    print(
-        f"Dynex giriş yaptı: "
-        f"{bot.user} ({bot.user.id})"
+    text_channel = member.guild.get_channel(
+        channel_id
     )
 
+    if not text_channel:
+        return
+
+    if before.channel is None and after.channel:
+        message = config["voice"]["join_message"]
+        message = message.replace(
+            "{user}",
+            member.mention
+        )
+
+        try:
+            await text_channel.send(message)
+        except Exception:
+            pass
+
+    elif before.channel and after.channel is None:
+        message = config["voice"]["leave_message"]
+        message = message.replace(
+            "{user}",
+            member.mention
+        )
+
+        try:
+            await text_channel.send(message)
+        except Exception:
+            pass
+
+
+# =========================================================
+# HATA YAKALAMA
+# =========================================================
+
+@bot.tree.error
+async def on_app_command_error(
+    interaction,
+    error
+):
+    print("Slash komut hatası:", repr(error))
+
     try:
-
-        synced = await bot.tree.sync()
-
-        print(
-            f"{len(synced)} slash komutu senkronize edildi."
-        )
-
-    except Exception as error:
-
-        print(
-            f"Slash komut hatası: {error}"
-        )
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                f"{EMOJIS['no']} Komut çalıştırılırken bir hata oluştu.",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"{EMOJIS['no']} Komut çalıştırılırken bir hata oluştu.",
+                ephemeral=True
+            )
+    except Exception:
+        pass
 
 
 # =========================================================
-# START
+# BAŞLAT
 # =========================================================
-
-TOKEN = os.getenv(
-    "DISCORD_TOKEN"
-)
 
 if not TOKEN:
-
     raise RuntimeError(
-        "DISCORD_TOKEN bulunamadı."
+        "DISCORD_TOKEN environment variable bulunamadı."
     )
 
 bot.run(TOKEN)
