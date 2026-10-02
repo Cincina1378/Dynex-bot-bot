@@ -1,27 +1,36 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
-import json
 import os
+import json
 import copy
 import random
-import time
-import re
 import asyncio
-from datetime import datetime, timedelta, timezone
+import time
+from pathlib import Path
+from datetime import timedelta
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
 
 # =========================================================
-# DYNEX
+# AYARLAR
 # =========================================================
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-SUPPORT_SERVER_ID = 1551647711332139098
-SUPPORT_SERVER_INVITE = "https://discord.gg/2pFJwJNDR"
+CONFIG_FILE = Path("config.json")
 
-EMOJIS = {
+SUPPORT_SERVER_ID = 1551647711332139098
+SUPPORT_INVITE = "https://discord.gg/2pFJwJNDR"
+
+
+# =========================================================
+# DYNEX EMOJİLERİ
+# =========================================================
+
+EMOJI = {
     "dynex": "<:Dynex:1555263060350996510>",
-    "dynexserver": "<:Dynexserver:1555263062112604270>",
+    "server": "<:Dynexserver:1555263062112604270>",
     "locked": "<:Dynexkilitli:1555263063366565918>",
     "settings": "<:Ayarlar:1555263064721334282>",
     "yes": "<:Dynexevet:1555263066235605023>",
@@ -37,7 +46,10 @@ EMOJIS = {
     "no": "<:Dynexhayir:1555265003727102134>",
 }
 
-CONFIG_FILE = "config.json"
+
+# =========================================================
+# VARSAYILAN SUNUCU AYARLARI
+# =========================================================
 
 DEFAULT_GUILD_CONFIG = {
     "ticket": {
@@ -45,19 +57,21 @@ DEFAULT_GUILD_CONFIG = {
         "staff_role_id": None,
         "panel_channel_id": None,
         "panel_title": "Destek Talebi",
-        "panel_description": "Destek talebi oluşturmak için aşağıdaki butona basın.",
+        "panel_description": "Destek almak için aşağıdaki butona bas.",
         "panel_image": None,
         "button_label": "Destek Talebi",
         "button_emoji": "🎫",
-        "options": []
+        "options": [],
     },
+
     "welcome": {
         "channel_id": None,
         "title": "Sunucumuza Hoş Geldin!",
         "description": "{member} sunucumuza katıldı.",
         "image": None,
-        "dm_message": None
+        "dm_message": None,
     },
+
     "moderation": {
         "bad_words": [],
         "warning_limit": 3,
@@ -65,8 +79,9 @@ DEFAULT_GUILD_CONFIG = {
         "timeout_duration": 10,
         "anti_link": False,
         "anti_spam": False,
-        "log_channel_id": None
+        "log_channel_id": None,
     },
+
     "logs": {
         "channel_id": None,
         "delete": False,
@@ -75,165 +90,293 @@ DEFAULT_GUILD_CONFIG = {
         "leave": False,
         "ban": False,
         "kick": False,
-        "timeout": False
+        "timeout": False,
     },
+
     "autorole": {
-        "role_id": None
+        "role_id": None,
     },
+
     "voice": {
         "channel_id": None,
         "join_message": "{member} ses kanalına katıldı.",
-        "leave_message": "{member} ses kanalından ayrıldı."
+        "leave_message": "{member} ses kanalından ayrıldı.",
     },
+
     "giveaway": {
         "staff_role_id": None,
         "channel_id": None,
         "log_channel_id": None,
         "default_winners": 1,
-        "default_duration": 10
+        "default_duration": 10,
     },
+
     "dm": {
-        "allowed_role_ids": []
+        "allowed_role_ids": [],
     },
+
     "language": "tr",
+
     "warnings": {},
+
     "games": {
         "number_channel_id": None,
         "number_target": 50,
         "number_current": 0,
         "number_started": False,
+
         "word_channel_id": None,
         "words": [],
         "word_current": None,
-        "word_started": False
-    }
+        "word_started": False,
+    },
 }
 
-try:
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        CONFIG = json.load(f)
-except Exception:
-    CONFIG = {}
+
+# =========================================================
+# DİL SİSTEMİ
+# =========================================================
+
+LANGUAGES = {
+    "tr": {
+        "name": "Türkçe",
+
+        "settings": "Dynex Ayarları",
+        "settings_desc": "Sunucu ayarlarını buradan yönetebilirsin.",
+
+        "language": "Sunucu Dili",
+        "language_select": "Sunucuda Dynex'in kullanacağı dili seç.",
+
+        "language_saved": "Sunucu dili Türkçe olarak ayarlandı.",
+        "language_changed": "Dil değiştirildi.",
+
+        "bot_status": "Dynex Durum",
+        "server_count": "Sunucu sayısı",
+        "support_server": "Destek sunucusu",
+        "prefix": "Prefix",
+        "uptime": "Çalışma süresi",
+        "owner": "Bot sahibi",
+
+        "help": "Yardım",
+        "ping": "Ping",
+        "user": "Kullanıcı",
+        "avatar": "Avatar",
+        "server": "Sunucu",
+        "roles": "Roller",
+
+        "success": "Başarılı",
+        "error": "Hata",
+        "no_permission": "Bu komutu kullanmak için yetkin yok.",
+        "not_found": "Bulunamadı.",
+        "back": "Geri",
+
+        "ticket": "Ticket",
+        "welcome": "Karşılama",
+        "moderation": "Moderasyon",
+        "logs": "Loglar",
+        "autorole": "Otorol",
+        "voice": "Ses",
+        "giveaway": "Çekiliş",
+        "dm": "DM",
+    },
+
+    "en": {
+        "name": "English",
+
+        "settings": "Dynex Settings",
+        "settings_desc": "Manage the server settings here.",
+
+        "language": "Server Language",
+        "language_select": "Choose the language Dynex will use on this server.",
+
+        "language_saved": "Server language has been set to English.",
+        "language_changed": "Language changed.",
+
+        "bot_status": "Dynex Status",
+        "server_count": "Server count",
+        "support_server": "Support server",
+        "prefix": "Prefix",
+        "uptime": "Uptime",
+        "owner": "Bot owner",
+
+        "help": "Help",
+        "ping": "Ping",
+        "user": "User",
+        "avatar": "Avatar",
+        "server": "Server",
+        "roles": "Roles",
+
+        "success": "Success",
+        "error": "Error",
+        "no_permission": "You do not have permission to use this command.",
+        "not_found": "Not found.",
+        "back": "Back",
+
+        "ticket": "Ticket",
+        "welcome": "Welcome",
+        "moderation": "Moderation",
+        "logs": "Logs",
+        "autorole": "Auto Role",
+        "voice": "Voice",
+        "giveaway": "Giveaway",
+        "dm": "DM",
+    },
+
+    "az": {
+        "name": "Azərbaycan dili",
+
+        "settings": "Dynex Ayarları",
+        "settings_desc": "Server ayarlarını buradan idarə et.",
+
+        "language": "Server Dili",
+        "language_select": "Dynex-in bu serverdə istifadə edəcəyi dili seç.",
+
+        "language_saved": "Server dili Azərbaycan dili olaraq təyin edildi.",
+        "language_changed": "Dil dəyişdirildi.",
+
+        "bot_status": "Dynex Vəziyyəti",
+        "server_count": "Server sayı",
+        "support_server": "Dəstək serveri",
+        "prefix": "Prefix",
+        "uptime": "İşləmə müddəti",
+        "owner": "Bot sahibi",
+
+        "help": "Kömək",
+        "ping": "Ping",
+        "user": "İstifadəçi",
+        "avatar": "Avatar",
+        "server": "Server",
+        "roles": "Rollar",
+
+        "success": "Uğurlu",
+        "error": "Xəta",
+        "no_permission": "Bu əmrdən istifadə etmək üçün icazən yoxdur.",
+        "not_found": "Tapılmadı.",
+        "back": "Geri",
+
+        "ticket": "Ticket",
+        "welcome": "Qarşılama",
+        "moderation": "Moderasiya",
+        "logs": "Loglar",
+        "autorole": "Avtorol",
+        "voice": "Səs",
+        "giveaway": "Çəkiliş",
+        "dm": "DM",
+    },
+}
 
 
-def merge_dict(default, current):
-    if not isinstance(default, dict):
-        return copy.deepcopy(current) if current is not None else copy.deepcopy(default)
+# =========================================================
+# CONFIG
+# =========================================================
 
-    result = copy.deepcopy(default)
+def deep_merge(target, defaults):
+    for key, value in defaults.items():
 
-    if isinstance(current, dict):
-        for key, value in current.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = merge_dict(result[key], value)
-            else:
-                result[key] = value
+        if isinstance(value, dict):
 
-    return result
+            if not isinstance(target.get(key), dict):
+                target[key] = {}
+
+            deep_merge(target[key], value)
+
+        elif key not in target:
+            target[key] = copy.deepcopy(value)
 
 
-def get_guild_config(guild_id):
-    gid = str(guild_id)
+def load_config():
 
-    if gid not in CONFIG:
-        CONFIG[gid] = copy.deepcopy(DEFAULT_GUILD_CONFIG)
-    else:
-        CONFIG[gid] = merge_dict(DEFAULT_GUILD_CONFIG, CONFIG[gid])
+    if not CONFIG_FILE.exists():
+        return {}
 
-    return CONFIG[gid]
+    try:
+        data = json.loads(
+            CONFIG_FILE.read_text(encoding="utf-8")
+        )
+
+        if not isinstance(data, dict):
+            return {}
+
+        return data
+
+    except Exception:
+        return {}
+
+
+CONFIG = load_config()
 
 
 def save_config():
+
+    CONFIG_FILE.write_text(
+        json.dumps(
+            CONFIG,
+            ensure_ascii=False,
+            indent=2
+        ),
+        encoding="utf-8"
+    )
+
+
+def get_guild_config(guild_id):
+
+    guild_id = str(guild_id)
+
+    if guild_id not in CONFIG:
+        CONFIG[guild_id] = copy.deepcopy(
+            DEFAULT_GUILD_CONFIG
+        )
+
+    else:
+        if not isinstance(CONFIG[guild_id], dict):
+            CONFIG[guild_id] = copy.deepcopy(
+                DEFAULT_GUILD_CONFIG
+            )
+
+        deep_merge(
+            CONFIG[guild_id],
+            DEFAULT_GUILD_CONFIG
+        )
+
+    language = CONFIG[guild_id].get(
+        "language",
+        "tr"
+    )
+
+    if language not in LANGUAGES:
+        CONFIG[guild_id]["language"] = "tr"
+
+    return CONFIG[guild_id]
+
+
+def get_language(guild):
+
+    config = get_guild_config(guild.id)
+
+    language = config.get(
+        "language",
+        "tr"
+    )
+
+    if language not in LANGUAGES:
+        language = "tr"
+
+    return language
+
+
+def t(guild, key, **kwargs):
+
+    language = get_language(guild)
+
+    value = LANGUAGES[language].get(
+        key,
+        LANGUAGES["tr"].get(key, key)
+    )
+
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(CONFIG, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print("Config kayıt hatası:", repr(e))
-
-
-def parse_emoji(value, guild):
-    if not value:
-        return None
-
-    value = str(value).strip()
-
-    if value.startswith("<:") or value.startswith("<a:"):
-        try:
-            emoji = discord.PartialEmoji.from_str(value)
-            if emoji.id:
-                return emoji
-        except Exception:
-            return None
-
-    if value.startswith(":") and value.endswith(":"):
-        name = value[1:-1].strip()
-        emoji = discord.utils.get(guild.emojis, name=name)
-        if emoji:
-            return emoji
-        return None
-
-    return value
-
-
-def emoji_exists(value, guild):
-    if not value:
-        return True
-
-    value = str(value).strip()
-
-    if value.startswith(":") and value.endswith(":"):
-        name = value[1:-1].strip()
-        return discord.utils.get(guild.emojis, name=name) is not None
-
-    if value.startswith("<:") or value.startswith("<a:"):
-        try:
-            emoji = discord.PartialEmoji.from_str(value)
-            return emoji.id is not None
-        except Exception:
-            return False
-
-    return True
-
-
-def channel_from_id(guild, channel_id):
-    if not channel_id:
-        return None
-    return guild.get_channel(int(channel_id))
-
-
-def role_from_id(guild, role_id):
-    if not role_id:
-        return None
-    return guild.get_role(int(role_id))
-
-
-def clean_channel_name(text):
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9ğüşöçıİĞÜŞÖÇ\- ]", "", text)
-    text = text.replace(" ", "-")
-    text = text[:80].strip("-")
-    return text or "ticket"
-
-
-def format_duration(seconds):
-    seconds = max(0, int(seconds))
-
-    days, seconds = divmod(seconds, 86400)
-    hours, seconds = divmod(seconds, 3600)
-    minutes, seconds = divmod(seconds, 60)
-
-    parts = []
-
-    if days:
-        parts.append(f"{days}g")
-    if hours:
-        parts.append(f"{hours}s")
-    if minutes:
-        parts.append(f"{minutes}d")
-    if seconds or not parts:
-        parts.append(f"{seconds}sn")
-
-    return " ".join(parts)
+        return value.format(**kwargs)
+    except Exception:
+        return value
 
 
 # =========================================================
@@ -241,42 +384,127 @@ def format_duration(seconds):
 # =========================================================
 
 intents = discord.Intents.default()
+
 intents.members = True
 intents.message_content = True
 intents.presences = True
-intents.voice_states = True
-intents.guilds = True
+
 
 bot = commands.Bot(
     command_prefix="D.",
-    intents=intents,
-    help_command=None
+    intents=intents
 )
 
-tree = bot.tree
 
 START_TIME = time.time()
-APPLICATION_OWNER = None
-SPAM_CACHE = {}
-GIVEAWAYS = {}
-TICKET_VIEW_REGISTERED = False
+SYNC_DONE = False
 
 
 # =========================================================
 # YARDIMCI
 # =========================================================
 
-async def send_log(guild, title, description, kind=None):
-    cfg = get_guild_config(guild.id)
-    logs = cfg["logs"]
+def black_color():
 
-    if not logs.get("channel_id"):
+    return discord.Color.from_rgb(
+        0,
+        0,
+        0
+    )
+
+
+def uptime_text():
+
+    seconds = int(
+        time.time() - START_TIME
+    )
+
+    days, seconds = divmod(
+        seconds,
+        86400
+    )
+
+    hours, seconds = divmod(
+        seconds,
+        3600
+    )
+
+    minutes, seconds = divmod(
+        seconds,
+        60
+    )
+
+    parts = []
+
+    if days:
+        parts.append(f"{days}g")
+
+    if hours:
+        parts.append(f"{hours}s")
+
+    if minutes:
+        parts.append(f"{minutes}d")
+
+    parts.append(f"{seconds}sn")
+
+    return " ".join(parts)
+
+
+def parse_emoji(value, guild):
+
+    if not value:
+        return None
+
+    value = str(value).strip()
+
+    if value.startswith("<:") or value.startswith("<a:"):
+
+        try:
+            return discord.PartialEmoji.from_str(
+                value
+            )
+
+        except Exception:
+            return None
+
+    if value.startswith(":") and value.endswith(":"):
+
+        name = value[1:-1].strip()
+
+        return discord.utils.get(
+            guild.emojis,
+            name=name
+        )
+
+    return value
+
+
+async def send_log(
+    guild,
+    setting,
+    title,
+    description
+):
+
+    config = get_guild_config(
+        guild.id
+    )
+
+    logs = config["logs"]
+
+    if not logs.get(setting):
         return
 
-    if kind and not logs.get(kind, False):
+    channel_id = logs.get(
+        "channel_id"
+    )
+
+    if not channel_id:
         return
 
-    channel = guild.get_channel(int(logs["channel_id"]))
+    channel = guild.get_channel(
+        channel_id
+    )
 
     if not channel:
         return
@@ -284,159 +512,622 @@ async def send_log(guild, title, description, kind=None):
     embed = discord.Embed(
         title=title,
         description=description,
-        color=discord.Color.from_rgb(0, 0, 0),
-        timestamp=datetime.now(timezone.utc)
+        color=black_color(),
+        timestamp=discord.utils.utcnow()
     )
 
     try:
-        await channel.send(embed=embed)
-    except Exception:
+        await channel.send(
+            embed=embed
+        )
+
+    except discord.HTTPException:
         pass
 
 
-async def get_owner():
-    global APPLICATION_OWNER
+# =========================================================
+# AYARLAR EMBED
+# =========================================================
 
-    if APPLICATION_OWNER:
-        return APPLICATION_OWNER
+def settings_embed(guild):
 
-    try:
-        app = await bot.application_info()
-        APPLICATION_OWNER = app.owner
-    except Exception:
-        APPLICATION_OWNER = None
+    config = get_guild_config(
+        guild.id
+    )
 
-    return APPLICATION_OWNER
+    language = config["language"]
 
+    embed = discord.Embed(
+        title=f"{EMOJI['settings']} {t(guild, 'settings')}",
+        description=t(
+            guild,
+            "settings_desc"
+        ),
+        color=black_color()
+    )
 
-def is_admin(member):
-    return bool(member and member.guild_permissions.administrator)
+    embed.add_field(
+        name=t(guild, "language"),
+        value=LANGUAGES[
+            language
+        ]["name"],
+        inline=False
+    )
 
-
-def has_role(member, role_id):
-    if not role_id:
-        return False
-
-    try:
-        return any(role.id == int(role_id) for role in member.roles)
-    except Exception:
-        return False
-
-
-def can_manage_giveaway(member, cfg):
-    if is_admin(member):
-        return True
-
-    role_id = cfg["giveaway"].get("staff_role_id")
-
-    return has_role(member, role_id)
+    return embed
 
 
-def can_use_dm(member, cfg):
-    if is_admin(member):
-        return True
+def language_embed(guild):
 
-    allowed = cfg["dm"].get("allowed_role_ids", [])
+    language = get_language(
+        guild
+    )
 
-    return any(role.id in allowed for role in member.roles)
+    embed = discord.Embed(
+        title=f"{EMOJI['settings']} {t(guild, 'language')}",
+        description=(
+            f"{t(guild, 'language_select')}\n\n"
+            f"**{LANGUAGES[language]['name']}**"
+        ),
+        color=black_color()
+    )
+
+    return embed
 
 
-async def safe_respond(interaction, content=None, embed=None, ephemeral=True, view=None):
-    try:
-        if interaction.response.is_done():
-            return await interaction.followup.send(
-                content=content,
-                embed=embed,
-                ephemeral=ephemeral,
-                view=view
+# =========================================================
+# AYARLAR - GERİ
+# =========================================================
+
+class SettingsBackButton(
+    discord.ui.Button
+):
+
+    def __init__(self):
+
+        super().__init__(
+            label="Geri",
+            style=discord.ButtonStyle.secondary
+        )
+
+    async def callback(
+        self,
+        interaction
+    ):
+
+        await interaction.response.edit_message(
+            embed=settings_embed(
+                interaction.guild
+            ),
+            view=SettingsView()
+        )
+
+
+# =========================================================
+# DİL SELECT
+# =========================================================
+
+class LanguageSelect(
+    discord.ui.Select
+):
+
+    def __init__(self):
+
+        options = [
+
+            discord.SelectOption(
+                label="Türkçe",
+                value="tr",
+                emoji="🇹🇷"
+            ),
+
+            discord.SelectOption(
+                label="English",
+                value="en",
+                emoji="🇬🇧"
+            ),
+
+            discord.SelectOption(
+                label="Azərbaycan dili",
+                value="az",
+                emoji="🇦🇿"
+            ),
+
+        ]
+
+        super().__init__(
+            placeholder="Dil / Language",
+            options=options
+        )
+
+    async def callback(
+        self,
+        interaction
+    ):
+
+        if not interaction.user.guild_permissions.administrator:
+
+            await interaction.response.send_message(
+                t(
+                    interaction.guild,
+                    "no_permission"
+                ),
+                ephemeral=True
             )
 
-        return await interaction.response.send_message(
-            content=content,
-            embed=embed,
-            ephemeral=ephemeral,
-            view=view
+            return
+
+        selected = self.values[0]
+
+        config = get_guild_config(
+            interaction.guild.id
         )
-    except Exception:
-        return None
+
+        config["language"] = selected
+
+        save_config()
+
+        await interaction.response.edit_message(
+            embed=language_embed(
+                interaction.guild
+            ),
+            view=LanguageView()
+        )
+
+
+class LanguageView(
+    discord.ui.View
+):
+
+    def __init__(self):
+
+        super().__init__(
+            timeout=180
+        )
+
+        self.add_item(
+            LanguageSelect()
+        )
+
+        self.add_item(
+            SettingsBackButton()
+        )
+
+
+# =========================================================
+# AYARLAR ANA SELECT
+# =========================================================
+
+class SettingsSelect(
+    discord.ui.Select
+):
+
+    def __init__(self):
+
+        options = [
+
+            discord.SelectOption(
+                label="Ticket",
+                value="ticket",
+                emoji="🎫"
+            ),
+
+            discord.SelectOption(
+                label="Welcome",
+                value="welcome",
+                emoji="👋"
+            ),
+
+            discord.SelectOption(
+                label="Moderation",
+                value="moderation",
+                emoji="🛡️"
+            ),
+
+            discord.SelectOption(
+                label="Logs",
+                value="logs",
+                emoji="📜"
+            ),
+
+            discord.SelectOption(
+                label="Autorole",
+                value="autorole",
+                emoji="🎭"
+            ),
+
+            discord.SelectOption(
+                label="Voice",
+                value="voice",
+                emoji="🔊"
+            ),
+
+            discord.SelectOption(
+                label="Giveaway",
+                value="giveaway",
+                emoji="🎉"
+            ),
+
+            discord.SelectOption(
+                label="DM",
+                value="dm",
+                emoji="✉️"
+            ),
+
+            discord.SelectOption(
+                label="Language",
+                value="language",
+                emoji="🌐"
+            ),
+
+        ]
+
+        super().__init__(
+            placeholder="Kategori seç",
+            options=options
+        )
+
+    async def callback(
+        self,
+        interaction
+    ):
+
+        if not interaction.user.guild_permissions.administrator:
+
+            await interaction.response.send_message(
+                t(
+                    interaction.guild,
+                    "no_permission"
+                ),
+                ephemeral=True
+            )
+
+            return
+
+        selected = self.values[0]
+
+        if selected == "language":
+
+            await interaction.response.edit_message(
+                embed=language_embed(
+                    interaction.guild
+                ),
+                view=LanguageView()
+            )
+
+            return
+
+        await interaction.response.edit_message(
+            embed=category_embed(
+                interaction.guild,
+                selected
+            ),
+            view=CategoryView(selected)
+        )
+
+
+class SettingsView(
+    discord.ui.View
+):
+
+    def __init__(self):
+
+        super().__init__(
+            timeout=180
+        )
+
+        self.add_item(
+            SettingsSelect()
+        )
+
+
+# =========================================================
+# KATEGORİ EMBED
+# =========================================================
+
+def category_embed(
+    guild,
+    category
+):
+
+    config = get_guild_config(
+        guild.id
+    )
+
+    names = {
+
+        "ticket": "ticket",
+        "welcome": "welcome",
+        "moderation": "moderation",
+        "logs": "logs",
+        "autorole": "autorole",
+        "voice": "voice",
+        "giveaway": "giveaway",
+        "dm": "dm",
+
+    }
+
+    embed = discord.Embed(
+        title=(
+            f"{EMOJI['settings']} "
+            f"{t(guild, names.get(category, category))}"
+        ),
+        color=black_color()
+    )
+
+    data = config.get(
+        category,
+        {}
+    )
+
+    embed.description = (
+        "```json\n"
+        + json.dumps(
+            data,
+            ensure_ascii=False,
+            indent=2
+        )[:3500]
+        + "\n```"
+    )
+
+    return embed
+
+
+class CategoryView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        category
+    ):
+
+        super().__init__(
+            timeout=180
+        )
+
+        self.category = category
+
+        self.add_item(
+            SettingsBackButton()
+        )
 
 
 # =========================================================
 # /BOT
 # =========================================================
 
-@tree.command(name="bot", description="Dynex botunun durumunu gösterir.")
-async def bot_info(interaction: discord.Interaction):
-    uptime = int(time.time() - START_TIME)
+@bot.tree.command(
+    name="bot",
+    description="Bot durumunu gösterir"
+)
+async def bot_status(
+    interaction: discord.Interaction
+):
 
-    support_guild = bot.get_guild(SUPPORT_SERVER_ID)
-    support_members = support_guild.member_count if support_guild else 0
+    if not interaction.guild:
+        return
 
-    owner = await get_owner()
-
-    owner_text = owner.mention if owner else "Bilinmiyor"
+    # ÖNEMLİ:
+    # Sunucu sayısı sadece botun gerçek guild cache'inden alınır.
+    server_count = len(
+        bot.guilds
+    )
 
     embed = discord.Embed(
-        title="Dynex Durum",
-        color=discord.Color.from_rgb(0, 0, 0)
+        title=(
+            f"{EMOJI['dynex']} "
+            f"{t(interaction.guild, 'bot_status')}"
+        ),
+        color=black_color()
     )
 
+    owner_text = "Bilinmiyor"
+
+    try:
+
+        owner = bot.application.owner
+
+        if owner:
+            owner_text = owner.mention
+
+    except Exception:
+        pass
+
+    support_guild = bot.get_guild(
+        SUPPORT_SERVER_ID
+    )
+
+    if support_guild:
+
+        support_members = str(
+            support_guild.member_count
+        )
+
+    else:
+
+        support_members = "Bilinmiyor"
+
     embed.add_field(
-        name="Sunucu sayısı",
-        value=str(len(bot.guilds)),
+        name=t(
+            interaction.guild,
+            "server_count"
+        ),
+        value=str(server_count),
         inline=True
     )
 
     embed.add_field(
-        name="Destek sunucusu üye sayısı",
-        value=str(support_members),
+        name=t(
+            interaction.guild,
+            "support_server"
+        ),
+        value=(
+            f"{support_members}\n"
+            f"{SUPPORT_INVITE}"
+        ),
         inline=True
     )
 
     embed.add_field(
-        name="Prefix",
-        value="`D.`",
+        name=t(
+            interaction.guild,
+            "prefix"
+        ),
+        value="D.",
         inline=True
     )
 
     embed.add_field(
-        name="Aktiflik",
-        value=format_duration(uptime),
+        name=t(
+            interaction.guild,
+            "uptime"
+        ),
+        value=uptime_text(),
         inline=True
     )
 
     embed.add_field(
-        name="Bot sahibi",
+        name=t(
+            interaction.guild,
+            "owner"
+        ),
         value=owner_text,
         inline=True
     )
 
-    embed.add_field(
-        name="Destek",
-        value=f"[Destek sunucusuna katıl]({SUPPORT_SERVER_INVITE})",
-        inline=True
+    await interaction.response.send_message(
+        embed=embed
     )
 
-    await interaction.response.send_message(embed=embed)
+
+# =========================================================
+# /DİL
+# =========================================================
+
+@bot.tree.command(
+    name="dil",
+    description="Sunucunun bot dilini ayarla"
+)
+@app_commands.default_permissions(
+    administrator=True
+)
+async def dil(
+    interaction: discord.Interaction
+):
+
+    if not interaction.guild:
+        return
+
+    if not interaction.user.guild_permissions.administrator:
+
+        await interaction.response.send_message(
+            t(
+                interaction.guild,
+                "no_permission"
+            ),
+            ephemeral=True
+        )
+
+        return
+
+    await interaction.response.send_message(
+        embed=language_embed(
+            interaction.guild
+        ),
+        view=LanguageView(),
+        ephemeral=True
+    )
+
+
+# =========================================================
+# /AYARLAR
+# =========================================================
+
+@bot.tree.command(
+    name="ayarlar",
+    description="Sunucu ayarlarını yönet"
+)
+@app_commands.default_permissions(
+    administrator=True
+)
+async def ayarlar(
+    interaction: discord.Interaction
+):
+
+    if not interaction.guild:
+        return
+
+    if not interaction.user.guild_permissions.administrator:
+
+        await interaction.response.send_message(
+            t(
+                interaction.guild,
+                "no_permission"
+            ),
+            ephemeral=True
+        )
+
+        return
+
+    await interaction.response.send_message(
+        embed=settings_embed(
+            interaction.guild
+        ),
+        view=SettingsView(),
+        ephemeral=True
+    )
+
+
+# =========================================================
+# /PING
+# =========================================================
+
+@bot.tree.command(
+    name="ping",
+    description="Bot gecikmesini gösterir"
+)
+async def ping(
+    interaction: discord.Interaction
+):
+
+    ping_ms = round(
+        bot.latency * 1000
+    )
+
+    await interaction.response.send_message(
+        f"{EMOJI['dynex']} **Ping:** `{ping_ms}ms`"
+    )
 
 
 # =========================================================
 # /YARDIM
 # =========================================================
 
-@tree.command(name="yardım", description="Dynex komutlarını gösterir.")
-async def help_command(interaction: discord.Interaction):
+@bot.tree.command(
+    name="yardim",
+    description="Komutları gösterir"
+)
+async def yardim(
+    interaction: discord.Interaction
+):
+
+    guild = interaction.guild
+
     embed = discord.Embed(
-        title=f"{EMOJIS['dynex']} Dynex Yardım",
-        description="Aşağıdaki kategorilerde Dynex komutlarını kullanabilirsiniz.",
-        color=discord.Color.from_rgb(0, 0, 0)
+        title=(
+            f"{EMOJI['about']} "
+            f"{t(guild, 'help')}"
+        ),
+        color=black_color()
     )
 
     embed.add_field(
         name="Genel",
         value=(
-            "`/bot` `/yardım` `/ping` `/kullanıcı` "
-            "`/avatar` `/sunucu` `/roller` `/dil`"
+            "`/bot` `/yardim` `/ping` "
+            "`/kullanici` `/avatar` "
+            "`/sunucu` `/roller`"
         ),
         inline=False
     )
@@ -444,9 +1135,11 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="Moderasyon",
         value=(
-            "`/uyar` `/uyarılar` `/uyarı-sıfırla` `/timeout` "
-            "`/kick` `/ban` `/temizle` `/sil` `/kilitle` "
-            "`/kilit-aç` `/yavaş-mod`"
+            "`/uyar` `/uyarilar` "
+            "`/uyari-sifirla` `/timeout` "
+            "`/kick` `/ban` `/temizle` "
+            "`/kilitle` `/kilit-ac` `/yavas-mod` "
+            "`/duyuru`"
         ),
         inline=False
     )
@@ -454,2869 +1147,1328 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="Eğlence",
         value=(
-            "`/sayı-oyunu-ayarla` `/sayı-oyunu-durdur` "
-            "`/kelime-oyunu-ayarla` `/kelime-oyunu-durdur` "
-            "`/kelime-ekle` `/kelime-çıkar` `/zar` "
-            "`/yazı-tura` `/8ball` `/sayı-tahmin`"
+            "`/zar` `/yazi-tura` "
+            "`/8ball` `/sayi-tahmin`"
         ),
         inline=False
     )
 
     embed.add_field(
-        name="Ticket",
-        value="`/ayarlar → Ticket` `/ticket-panel`",
+        name="Sistem",
+        value=(
+            "`/ayarlar` `/dil` `/dm` "
+            "`/ticket-panel`"
+        ),
         inline=False
     )
 
-    embed.add_field(
-        name="Çekiliş",
-        value="`/çekiliş` `/çekiliş-bitir`",
-        inline=False
+    await interaction.response.send_message(
+        embed=embed,
+        ephemeral=True
     )
-
-    embed.add_field(
-        name="Sunucu",
-        value="`/ayarlar` `/duyuru` `/dm`",
-        inline=False
-    )
-
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # =========================================================
-# GENEL KOMUTLAR
+# /SUNUCU
 # =========================================================
 
-@tree.command(name="ping", description="Botun ping değerini gösterir.")
-async def ping(interaction: discord.Interaction):
-    ms = round(bot.latency * 1000)
-
-    if ms <= 80:
-        status = "Mükemmel"
-    elif ms <= 150:
-        status = "İyi"
-    elif ms <= 250:
-        status = "Orta"
-    elif ms <= 400:
-        status = "Zayıf"
-    else:
-        status = "Berbat"
-
-    embed = discord.Embed(
-        title="Dynex Ping",
-        description=f"Bot gecikmesi: **{ms}ms**\nDurum: **{status}**",
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-    await interaction.response.send_message(embed=embed)
-
-
-@tree.command(name="kullanıcı", description="Bir kullanıcının bilgilerini gösterir.")
-@app_commands.describe(kullanıcı="Bilgilerini görmek istediğiniz kullanıcı.")
-async def user_info(
-    interaction: discord.Interaction,
-    kullanıcı: discord.Member = None
+@bot.tree.command(
+    name="sunucu",
+    description="Sunucu bilgilerini göster"
+)
+async def sunucu(
+    interaction: discord.Interaction
 ):
-    kullanıcı = kullanıcı or interaction.user
+
+    guild = interaction.guild
 
     embed = discord.Embed(
-        title=f"{kullanıcı.display_name} Kullanıcı Bilgileri",
-        color=discord.Color.from_rgb(0, 0, 0)
+        title=(
+            f"{EMOJI['server']} "
+            f"{t(guild, 'server')}"
+        ),
+        color=black_color()
     )
 
-    embed.set_thumbnail(url=kullanıcı.display_avatar.url)
-
     embed.add_field(
-        name="Kullanıcı",
-        value=kullanıcı.mention,
-        inline=False
+        name="Ad",
+        value=guild.name,
+        inline=True
     )
 
     embed.add_field(
         name="ID",
-        value=str(kullanıcı.id),
+        value=str(guild.id),
         inline=True
     )
 
     embed.add_field(
-        name="Hesap",
-        value=discord.utils.format_dt(kullanıcı.created_at, "R"),
+        name="Üye",
+        value=str(guild.member_count),
         inline=True
     )
 
     embed.add_field(
-        name="Sunucuya katılım",
-        value=discord.utils.format_dt(kullanıcı.joined_at, "R")
-        if kullanıcı.joined_at else "Bilinmiyor",
+        name="Kanal",
+        value=str(len(guild.channels)),
         inline=True
     )
 
-    await interaction.response.send_message(embed=embed)
+    embed.add_field(
+        name="Rol",
+        value=str(len(guild.roles)),
+        inline=True
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
 
 
-@tree.command(name="avatar", description="Kullanıcının avatarını gösterir.")
-@app_commands.describe(kullanıcı="Avatarını görmek istediğiniz kullanıcı.")
+# =========================================================
+# /ROLLER
+# =========================================================
+
+@bot.tree.command(
+    name="roller",
+    description="Sunucu rollerini göster"
+)
+async def roller(
+    interaction: discord.Interaction
+):
+
+    guild = interaction.guild
+
+    role_text = "\n".join(
+        f"`{role.id}` — {role.name}"
+        for role in guild.roles[-50:]
+    )
+
+    embed = discord.Embed(
+        title=t(guild, "roles"),
+        description=role_text,
+        color=black_color()
+    )
+
+    await interaction.response.send_message(
+        embed=embed,
+        ephemeral=True
+    )
+
+
+# =========================================================
+# /KULLANICI
+# =========================================================
+
+@bot.tree.command(
+    name="kullanici",
+    description="Kullanıcı bilgilerini göster"
+)
+@app_commands.describe(
+    kullanici="Kullanıcı"
+)
+async def kullanici(
+    interaction: discord.Interaction,
+    kullanici: discord.Member = None
+):
+
+    user = kullanici or interaction.user
+
+    embed = discord.Embed(
+        title=t(
+            interaction.guild,
+            "user"
+        ),
+        color=black_color()
+    )
+
+    embed.set_thumbnail(
+        url=user.display_avatar.url
+    )
+
+    embed.add_field(
+        name="ID",
+        value=str(user.id)
+    )
+
+    embed.add_field(
+        name="Hesap oluşturulma",
+        value=discord.utils.format_dt(
+            user.created_at,
+            "F"
+        )
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# =========================================================
+# /AVATAR
+# =========================================================
+
+@bot.tree.command(
+    name="avatar",
+    description="Kullanıcının avatarını göster"
+)
+@app_commands.describe(
+    kullanici="Kullanıcı"
+)
 async def avatar(
     interaction: discord.Interaction,
-    kullanıcı: discord.Member = None
+    kullanici: discord.Member = None
 ):
-    kullanıcı = kullanıcı or interaction.user
+
+    user = kullanici or interaction.user
 
     embed = discord.Embed(
-        title=f"{kullanıcı.display_name} Avatar",
-        color=discord.Color.from_rgb(0, 0, 0)
+        color=black_color()
     )
 
-    embed.set_image(url=kullanıcı.display_avatar.url)
-
-    await interaction.response.send_message(embed=embed)
-
-
-@tree.command(name="sunucu", description="Sunucu bilgilerini gösterir.")
-async def server_info(interaction: discord.Interaction):
-    guild = interaction.guild
-
-    embed = discord.Embed(
-        title=f"{guild.name} Sunucu Bilgileri",
-        color=discord.Color.from_rgb(0, 0, 0)
+    embed.set_image(
+        url=user.display_avatar.url
     )
 
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-
-    embed.add_field(name="Sunucu ID", value=str(guild.id), inline=True)
-    embed.add_field(name="Üye", value=str(guild.member_count), inline=True)
-    embed.add_field(name="Kanal", value=str(len(guild.channels)), inline=True)
-    embed.add_field(name="Rol", value=str(len(guild.roles)), inline=True)
-    embed.add_field(
-        name="Oluşturulma",
-        value=discord.utils.format_dt(guild.created_at, "R"),
-        inline=True
+    await interaction.response.send_message(
+        embed=embed
     )
 
-    await interaction.response.send_message(embed=embed)
+
+# =========================================================
+# ZAR
+# =========================================================
+
+@bot.tree.command(
+    name="zar",
+    description="Zar at"
+)
+async def zar(
+    interaction: discord.Interaction
+):
+
+    result = random.randint(
+        1,
+        6
+    )
+
+    await interaction.response.send_message(
+        f"🎲 **{result}**"
+    )
 
 
-@tree.command(name="roller", description="Sunucudaki rolleri listeler.")
-async def roles(interaction: discord.Interaction):
-    guild = interaction.guild
+# =========================================================
+# YAZI TURA
+# =========================================================
 
-    role_list = [
-        role.mention
-        for role in reversed(guild.roles)
-        if role != guild.default_role
+@bot.tree.command(
+    name="yazi-tura",
+    description="Yazı veya tura at"
+)
+async def yazi_tura(
+    interaction: discord.Interaction
+):
+
+    result = random.choice(
+        [
+            "Yazı",
+            "Tura"
+        ]
+    )
+
+    await interaction.response.send_message(
+        f"🪙 **{result}**"
+    )
+
+
+# =========================================================
+# 8BALL
+# =========================================================
+
+@bot.tree.command(
+    name="8ball",
+    description="8ball"
+)
+@app_commands.describe(
+    soru="Sorun"
+)
+async def eightball(
+    interaction: discord.Interaction,
+    soru: str
+):
+
+    answers = [
+        "Evet.",
+        "Hayır.",
+        "Kesinlikle.",
+        "Belki.",
+        "Bilinmiyor.",
+        "Büyük ihtimalle."
     ]
 
-    text = "\n".join(role_list)
-
-    if not text:
-        text = "Sunucuda özel rol bulunmuyor."
-
-    if len(text) > 3900:
-        text = text[:3900] + "\n..."
-
-    embed = discord.Embed(
-        title="Sunucu Rolleri",
-        description=text,
-        color=discord.Color.from_rgb(0, 0, 0)
+    await interaction.response.send_message(
+        f"🎱 {random.choice(answers)}"
     )
-
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # =========================================================
-# MODERASYON
+# SAYI TAHMİN
 # =========================================================
 
-@tree.command(name="temizle", description="Mesajları toplu olarak siler.")
-@app_commands.describe(miktar="Silinecek mesaj sayısı.")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def clear_messages(
-    interaction: discord.Interaction,
-    miktar: app_commands.Range[int, 1, 100]
-):
-    await interaction.response.defer(ephemeral=True)
-
-    deleted = await interaction.channel.purge(limit=miktar)
-
-    await interaction.followup.send(
-        f"{EMOJIS['yes']} **{len(deleted)}** mesaj silindi.",
-        ephemeral=True
-    )
-
-
-@tree.command(name="sil", description="Belirli sayıda mesajı siler.")
-@app_commands.describe(miktar="Silinecek mesaj sayısı.")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def delete_messages(
-    interaction: discord.Interaction,
-    miktar: app_commands.Range[int, 1, 100]
-):
-    await interaction.response.defer(ephemeral=True)
-
-    deleted = await interaction.channel.purge(limit=miktar)
-
-    await interaction.followup.send(
-        f"{EMOJIS['yes']} **{len(deleted)}** mesaj silindi.",
-        ephemeral=True
-    )
-
-
-@tree.command(name="ban", description="Kullanıcıyı sunucudan yasaklar.")
-@app_commands.describe(
-    kullanıcı="Yasaklanacak kullanıcı.",
-    sebep="Yasaklama sebebi."
+@bot.tree.command(
+    name="sayi-tahmin",
+    description="1-100 arasında sayı tahmin et"
 )
-@app_commands.checks.has_permissions(ban_members=True)
-async def ban(
-    interaction: discord.Interaction,
-    kullanıcı: discord.Member,
-    sebep: str = "Sebep belirtilmedi."
+async def sayi_tahmin(
+    interaction: discord.Interaction
 ):
-    if kullanıcı == interaction.user:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Kendinizi yasaklayamazsınız.",
-            ephemeral=True
+
+    number = random.randint(
+        1,
+        100
+    )
+
+    await interaction.response.send_message(
+        "🎯 1-100 arasında bir sayı tuttum. "
+        "30 saniye içinde kanala tahminini yaz."
+    )
+
+    def check(message):
+
+        return (
+            message.author.id == interaction.user.id
+            and message.channel.id == interaction.channel.id
+            and message.content.isdigit()
         )
 
     try:
-        await kullanıcı.ban(reason=sebep)
 
-        await interaction.response.send_message(
-            f"{EMOJIS['yes']} {kullanıcı.mention} yasaklandı."
+        message = await bot.wait_for(
+            "message",
+            timeout=30,
+            check=check
         )
 
-        await send_log(
-            interaction.guild,
-            "Üye Yasaklandı",
-            f"{kullanıcı.mention} yasaklandı.\nSebep: {sebep}",
-            "ban"
+        guess = int(
+            message.content
         )
 
-    except discord.Forbidden:
+        if guess == number:
+
+            await message.reply(
+                f"{EMOJI['correct']} Doğru tahmin!"
+            )
+
+        elif guess < number:
+
+            await message.reply(
+                "📈 Daha büyük."
+            )
+
+        else:
+
+            await message.reply(
+                "📉 Daha küçük."
+            )
+
+    except asyncio.TimeoutError:
+
+        pass
+
+
+# =========================================================
+# MODERASYON KONTROL
+# =========================================================
+
+async def moderation_check(
+    interaction,
+    permission
+):
+
+    if not getattr(
+        interaction.user.guild_permissions,
+        permission,
+        False
+    ):
+
         await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu kullanıcıyı yasaklayamıyorum.",
+            t(
+                interaction.guild,
+                "no_permission"
+            ),
             ephemeral=True
         )
 
+        return False
 
-@tree.command(name="kick", description="Kullanıcıyı sunucudan atar.")
-@app_commands.describe(
-    kullanıcı="Atılacak kullanıcı.",
-    sebep="Atılma sebebi."
+    return True
+
+
+# =========================================================
+# TEMİZLE
+# =========================================================
+
+@bot.tree.command(
+    name="temizle",
+    description="Mesajları temizle"
 )
-@app_commands.checks.has_permissions(kick_members=True)
+@app_commands.describe(
+    miktar="Silinecek mesaj sayısı"
+)
+async def temizle(
+    interaction: discord.Interaction,
+    miktar: app_commands.Range[int, 1, 100]
+):
+
+    if not await moderation_check(
+        interaction,
+        "manage_messages"
+    ):
+        return
+
+    await interaction.response.defer(
+        ephemeral=True
+    )
+
+    deleted = await interaction.channel.purge(
+        limit=miktar
+    )
+
+    await interaction.followup.send(
+        f"{EMOJI['yes']} `{len(deleted)}` mesaj silindi.",
+        ephemeral=True
+    )
+
+
+# =========================================================
+# KICK
+# =========================================================
+
+@bot.tree.command(
+    name="kick",
+    description="Üyeyi sunucudan at"
+)
+@app_commands.describe(
+    uye="Üye",
+    sebep="Sebep"
+)
 async def kick(
     interaction: discord.Interaction,
-    kullanıcı: discord.Member,
-    sebep: str = "Sebep belirtilmedi."
+    uye: discord.Member,
+    sebep: str = "Belirtilmedi"
 ):
-    if kullanıcı == interaction.user:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Kendinizi atamazsınız.",
-            ephemeral=True
-        )
 
-    try:
-        await kullanıcı.kick(reason=sebep)
+    if not await moderation_check(
+        interaction,
+        "kick_members"
+    ):
+        return
 
-        await interaction.response.send_message(
-            f"{EMOJIS['yes']} {kullanıcı.mention} sunucudan atıldı."
-        )
+    await uye.kick(
+        reason=sebep
+    )
 
-        await send_log(
-            interaction.guild,
-            "Üye Atıldı",
-            f"{kullanıcı.mention} atıldı.\nSebep: {sebep}",
-            "kick"
-        )
+    await interaction.response.send_message(
+        f"{EMOJI['yes']} {uye.mention} sunucudan atıldı."
+    )
 
-    except discord.Forbidden:
-        await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu kullanıcıyı atamıyorum.",
-            ephemeral=True
-        )
+    await send_log(
+        interaction.guild,
+        "kick",
+        "Kick",
+        f"{uye.mention}\nSebep: {sebep}"
+    )
 
 
-@tree.command(name="timeout", description="Kullanıcıya timeout uygular.")
-@app_commands.describe(
-    kullanıcı="Timeout uygulanacak kullanıcı.",
-    dakika="Timeout süresi.",
-    sebep="Timeout sebebi."
+# =========================================================
+# BAN
+# =========================================================
+
+@bot.tree.command(
+    name="ban",
+    description="Üyeyi yasakla"
 )
-@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.describe(
+    uye="Üye",
+    sebep="Sebep"
+)
+async def ban(
+    interaction: discord.Interaction,
+    uye: discord.Member,
+    sebep: str = "Belirtilmedi"
+):
+
+    if not await moderation_check(
+        interaction,
+        "ban_members"
+    ):
+        return
+
+    await uye.ban(
+        reason=sebep
+    )
+
+    await interaction.response.send_message(
+        f"{EMOJI['yes']} {uye.mention} yasaklandı."
+    )
+
+    await send_log(
+        interaction.guild,
+        "ban",
+        "Ban",
+        f"{uye.mention}\nSebep: {sebep}"
+    )
+
+
+# =========================================================
+# TIMEOUT
+# =========================================================
+
+@bot.tree.command(
+    name="timeout",
+    description="Üyeye timeout uygula"
+)
+@app_commands.describe(
+    uye="Üye",
+    dakika="Dakika"
+)
 async def timeout(
     interaction: discord.Interaction,
-    kullanıcı: discord.Member,
-    dakika: app_commands.Range[int, 1, 40320],
-    sebep: str = "Sebep belirtilmedi."
+    uye: discord.Member,
+    dakika: app_commands.Range[int, 1, 10080]
 ):
-    if kullanıcı == interaction.user:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Kendinize timeout veremezsiniz.",
-            ephemeral=True
-        )
 
-    try:
-        until = discord.utils.utcnow() + timedelta(minutes=dakika)
+    if not await moderation_check(
+        interaction,
+        "moderate_members"
+    ):
+        return
 
-        await kullanıcı.timeout(
-            until,
-            reason=sebep
-        )
+    await uye.timeout(
+        discord.utils.utcnow()
+        + timedelta(minutes=dakika)
+    )
 
-        await interaction.response.send_message(
-            f"{EMOJIS['yes']} {kullanıcı.mention} **{dakika} dakika** timeout aldı."
-        )
+    await interaction.response.send_message(
+        f"{EMOJI['yes']} {uye.mention} "
+        f"`{dakika}` dakika timeout aldı."
+    )
 
-        await send_log(
-            interaction.guild,
-            "Timeout",
-            f"{kullanıcı.mention} timeout aldı.\nSüre: {dakika} dakika\nSebep: {sebep}",
-            "timeout"
-        )
-
-    except discord.Forbidden:
-        await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu kullanıcıya timeout veremiyorum.",
-            ephemeral=True
-        )
+    await send_log(
+        interaction.guild,
+        "timeout",
+        "Timeout",
+        f"{uye.mention}\nSüre: {dakika} dakika"
+    )
 
 
-@tree.command(name="uyar", description="Kullanıcıya uyarı verir.")
-@app_commands.describe(
-    kullanıcı="Uyarılacak kullanıcı.",
-    sebep="Uyarı sebebi."
+# =========================================================
+# UYAR
+# =========================================================
+
+@bot.tree.command(
+    name="uyar",
+    description="Üyeyi uyar"
 )
-@app_commands.checks.has_permissions(moderate_members=True)
-async def warn(
+@app_commands.describe(
+    uye="Üye",
+    sebep="Sebep"
+)
+async def uyar(
     interaction: discord.Interaction,
-    kullanıcı: discord.Member,
-    sebep: str = "Sebep belirtilmedi."
+    uye: discord.Member,
+    sebep: str = "Belirtilmedi"
 ):
-    if kullanıcı == interaction.user:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Kendinizi uyaramazsınız.",
-            ephemeral=True
-        )
 
-    cfg = get_guild_config(interaction.guild.id)
-    warnings = cfg["warnings"]
+    if not await moderation_check(
+        interaction,
+        "moderate_members"
+    ):
+        return
 
-    gid = str(interaction.guild.id)
-    uid = str(kullanıcı.id)
+    config = get_guild_config(
+        interaction.guild.id
+    )
 
-    warnings.setdefault(gid, {})
-    warnings[gid].setdefault(uid, [])
+    warnings = config["warnings"].setdefault(
+        str(uye.id),
+        []
+    )
 
-    warnings[gid][uid].append({
-        "reason": sebep,
-        "moderator": interaction.user.id,
-        "time": datetime.now(timezone.utc).isoformat()
-    })
+    warnings.append(
+        {
+            "reason": sebep,
+            "by": interaction.user.id,
+            "time": int(time.time())
+        }
+    )
 
     save_config()
 
-    count = len(warnings[gid][uid])
-    limit = max(1, int(cfg["moderation"].get("warning_limit", 3)))
-
     await interaction.response.send_message(
-        f"{EMOJIS['yes']} {kullanıcı.mention} uyarıldı.\n"
-        f"Uyarı sayısı: **{count}/{limit}**"
+        f"⚠️ {uye.mention} uyarıldı.\n"
+        f"Toplam uyarı: `{len(warnings)}`"
     )
 
-    if count >= limit:
-        action = cfg["moderation"].get("warning_action", "timeout")
 
-        try:
-            if action == "timeout":
-                minutes = int(cfg["moderation"].get("timeout_duration", 10))
-                await kullanıcı.timeout(
-                    discord.utils.utcnow() + timedelta(minutes=minutes),
-                    reason="Uyarı limiti aşıldı."
-                )
+# =========================================================
+# UYARILAR
+# =========================================================
 
-            elif action == "kick":
-                await kullanıcı.kick(reason="Uyarı limiti aşıldı.")
-
-            elif action == "ban":
-                await kullanıcı.ban(reason="Uyarı limiti aşıldı.")
-
-        except Exception:
-            pass
-
-
-@tree.command(name="uyarılar", description="Kullanıcının uyarılarını gösterir.")
-@app_commands.describe(kullanıcı="Uyarıları gösterilecek kullanıcı.")
-@app_commands.checks.has_permissions(moderate_members=True)
-async def warnings(
+@bot.tree.command(
+    name="uyarilar",
+    description="Üyenin uyarılarını göster"
+)
+@app_commands.describe(
+    uye="Üye"
+)
+async def uyarilar(
     interaction: discord.Interaction,
-    kullanıcı: discord.Member
+    uye: discord.Member = None
 ):
-    cfg = get_guild_config(interaction.guild.id)
 
-    gid = str(interaction.guild.id)
-    uid = str(kullanıcı.id)
+    user = uye or interaction.user
 
-    data = cfg["warnings"].get(gid, {}).get(uid, [])
+    warnings = get_guild_config(
+        interaction.guild.id
+    )["warnings"].get(
+        str(user.id),
+        []
+    )
 
-    if not data:
-        return await interaction.response.send_message(
-            f"{kullanıcı.mention} için kayıtlı uyarı yok.",
+    if not warnings:
+
+        await interaction.response.send_message(
+            f"{user.mention} için uyarı bulunmuyor.",
             ephemeral=True
         )
+
+        return
 
     lines = []
 
-    for i, warning in enumerate(data[-10:], 1):
+    for index, warning in enumerate(
+        warnings,
+        1
+    ):
+
         lines.append(
-            f"**{i}.** {warning.get('reason', 'Sebep yok')}"
+            f"**{index}.** "
+            f"{warning.get('reason', 'Belirtilmedi')}"
         )
 
-    embed = discord.Embed(
-        title=f"{kullanıcı.display_name} Uyarıları",
-        description="\n".join(lines),
-        color=discord.Color.from_rgb(0, 0, 0)
+    await interaction.response.send_message(
+        "\n".join(lines),
+        ephemeral=True
     )
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 
+# =========================================================
+# UYARI SIFIRLA
+# =========================================================
 
-@tree.command(name="uyarı-sıfırla", description="Kullanıcının uyarılarını sıfırlar.")
-@app_commands.describe(kullanıcı="Uyarıları sıfırlanacak kullanıcı.")
-@app_commands.checks.has_permissions(administrator=True)
-async def reset_warnings(
+@bot.tree.command(
+    name="uyari-sifirla",
+    description="Üyenin uyarılarını sıfırla"
+)
+@app_commands.describe(
+    uye="Üye"
+)
+async def uyarı_sifirla(
     interaction: discord.Interaction,
-    kullanıcı: discord.Member
+    uye: discord.Member
 ):
-    cfg = get_guild_config(interaction.guild.id)
 
-    gid = str(interaction.guild.id)
-    uid = str(kullanıcı.id)
+    if not await moderation_check(
+        interaction,
+        "moderate_members"
+    ):
+        return
 
-    cfg["warnings"].setdefault(gid, {})
-    cfg["warnings"][gid][uid] = []
+    config = get_guild_config(
+        interaction.guild.id
+    )
+
+    config["warnings"].pop(
+        str(uye.id),
+        None
+    )
 
     save_config()
 
     await interaction.response.send_message(
-        f"{EMOJIS['yes']} {kullanıcı.mention} kullanıcısının uyarıları sıfırlandı.",
-        ephemeral=True
+        f"{EMOJI['yes']} {uye.mention} uyarıları sıfırlandı."
     )
 
 
-@tree.command(name="kilitle", description="Kanalı kilitler.")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def lock_channel(interaction: discord.Interaction):
-    overwrite = interaction.channel.overwrites_for(
-        interaction.guild.default_role
-    )
+# =========================================================
+# KİLİTLE
+# =========================================================
 
-    overwrite.send_messages = False
+@bot.tree.command(
+    name="kilitle",
+    description="Kanalı kilitle"
+)
+async def kilitle(
+    interaction: discord.Interaction
+):
+
+    if not await moderation_check(
+        interaction,
+        "manage_channels"
+    ):
+        return
 
     await interaction.channel.set_permissions(
         interaction.guild.default_role,
-        overwrite=overwrite
+        send_messages=False
     )
 
     await interaction.response.send_message(
-        f"{EMOJIS['locked']} Kanal kilitlendi."
+        f"{EMOJI['locked']} Kanal kilitlendi."
     )
 
 
-@tree.command(name="kilit-aç", description="Kanal kilidini açar.")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def unlock_channel(interaction: discord.Interaction):
-    overwrite = interaction.channel.overwrites_for(
-        interaction.guild.default_role
-    )
+# =========================================================
+# KİLİT AÇ
+# =========================================================
 
-    overwrite.send_messages = None
+@bot.tree.command(
+    name="kilit-ac",
+    description="Kanal kilidini aç"
+)
+async def kilit_ac(
+    interaction: discord.Interaction
+):
+
+    if not await moderation_check(
+        interaction,
+        "manage_channels"
+    ):
+        return
 
     await interaction.channel.set_permissions(
         interaction.guild.default_role,
-        overwrite=overwrite
+        send_messages=None
     )
 
     await interaction.response.send_message(
-        f"{EMOJIS['unlock']} Kanalın kilidi açıldı."
+        f"{EMOJI['unlock']} Kanal kilidi açıldı."
     )
 
 
-@tree.command(name="yavaş-mod", description="Kanalın yavaş modunu ayarlar.")
-@app_commands.describe(saniye="0 ile 21600 arasında saniye.")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def slowmode(
+# =========================================================
+# YAVAŞ MOD
+# =========================================================
+
+@bot.tree.command(
+    name="yavas-mod",
+    description="Yavaş modu ayarla"
+)
+@app_commands.describe(
+    saniye="0 = kapalı"
+)
+async def yavas_mod(
     interaction: discord.Interaction,
     saniye: app_commands.Range[int, 0, 21600]
 ):
-    await interaction.channel.edit(slowmode_delay=saniye)
+
+    if not await moderation_check(
+        interaction,
+        "manage_channels"
+    ):
+        return
+
+    await interaction.channel.edit(
+        slowmode_delay=saniye
+    )
 
     await interaction.response.send_message(
-        f"{EMOJIS['yes']} Yavaş mod **{saniye} saniye** olarak ayarlandı."
+        f"{EMOJI['yes']} Yavaş mod: `{saniye}` saniye."
     )
 
 
-@tree.command(name="duyuru", description="Sunucuda duyuru gönderir.")
-@app_commands.describe(
-    başlık="Duyuru başlığı.",
-    mesaj="Duyuru mesajı."
+# =========================================================
+# DUYURU
+# =========================================================
+
+@bot.tree.command(
+    name="duyuru",
+    description="Duyuru gönder"
 )
-@app_commands.checks.has_permissions(manage_messages=True)
-async def announcement(
+@app_commands.describe(
+    mesaj="Duyuru mesajı"
+)
+async def duyuru(
     interaction: discord.Interaction,
-    başlık: str,
     mesaj: str
 ):
-    embed = discord.Embed(
-        title=başlık,
-        description=mesaj,
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
 
-    embed.set_footer(text=f"{interaction.guild.name} • Dynex")
-
-    await interaction.response.send_message(embed=embed)
-
-
-# =========================================================
-# DİL
-# =========================================================
-
-class LanguageSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(
-                label="Türkçe",
-                value="tr",
-                emoji="🇹🇷"
-            ),
-            discord.SelectOption(
-                label="English",
-                value="en",
-                emoji="🇬🇧"
-            ),
-            discord.SelectOption(
-                label="Azərbaycan",
-                value="az",
-                emoji="🇦🇿"
-            )
-        ]
-
-        super().__init__(
-            placeholder="Bir dil seçin...",
-            options=options,
-            custom_id="dynex_language_select"
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["language"] = self.values[0]
-
-        save_config()
-
-        await interaction.response.send_message(
-            f"{EMOJIS['yes']} Dil başarıyla değiştirildi.",
-            ephemeral=True
-        )
-
-
-class LanguageView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=300)
-        self.add_item(LanguageSelect())
-
-
-@tree.command(name="dil", description="Sunucunun dilini ayarlar.")
-@app_commands.checks.has_permissions(administrator=True)
-async def language(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "Sunucunuz için bir dil seçin:",
-        view=LanguageView(),
-        ephemeral=True
-    )
-
-
-# =========================================================
-# DM
-# =========================================================
-
-class DmRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="DM gönderilecek rolü seçin...",
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_dm_role_select"
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        role = self.values[0]
-
-        await interaction.response.send_modal(
-            DmModal(role)
-        )
-
-
-class DmModal(discord.ui.Modal, title="Toplu DM"):
-    def __init__(self, role):
-        super().__init__(timeout=300)
-
-        self.role = role
-
-        self.title_input = discord.ui.TextInput(
-            label="Başlık",
-            placeholder="DM başlığı",
-            max_length=256,
-            required=True
-        )
-
-        self.message_input = discord.ui.TextInput(
-            label="Mesaj",
-            placeholder="Gönderilecek mesaj",
-            style=discord.TextStyle.paragraph,
-            max_length=1900,
-            required=True
-        )
-
-        self.add_item(self.title_input)
-        self.add_item(self.message_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        if not can_use_dm(interaction.user, cfg):
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Bu komutu kullanma yetkiniz yok.",
-                ephemeral=True
-            )
-
-        await interaction.response.defer(ephemeral=True)
-
-        sent = 0
-        failed = 0
-
-        embed = discord.Embed(
-            title=self.title_input.value,
-            description=self.message_input.value,
-            color=discord.Color.from_rgb(0, 0, 0)
-        )
-
-        for member in self.role.members:
-            if member.bot:
-                continue
-
-            try:
-                await member.send(embed=embed)
-                sent += 1
-            except Exception:
-                failed += 1
-
-        await interaction.followup.send(
-            f"{EMOJIS['yes']} DM işlemi tamamlandı.\n"
-            f"Gönderildi: **{sent}**\n"
-            f"Gönderilemedi: **{failed}**",
-            ephemeral=True
-        )
-
-
-class DmView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=300)
-        self.add_item(DmRoleSelect())
-
-
-@tree.command(name="dm", description="Belirli bir role toplu DM gönderir.")
-async def dm_command(interaction: discord.Interaction):
-    cfg = get_guild_config(interaction.guild.id)
-
-    if not can_use_dm(interaction.user, cfg):
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu komutu kullanma yetkiniz yok.",
-            ephemeral=True
-        )
-
-    await interaction.response.send_message(
-        "DM gönderilecek rolü seçin:",
-        view=DmView(),
-        ephemeral=True
-    )
-
-
-# =========================================================
-# AYARLAR
-# =========================================================
-
-class SettingsMainSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(
-                label="Ticket",
-                value="ticket",
-                emoji="🎫"
-            ),
-            discord.SelectOption(
-                label="Welcome",
-                value="welcome",
-                emoji="👋"
-            ),
-            discord.SelectOption(
-                label="Moderation",
-                value="moderation",
-                emoji="🛡️"
-            ),
-            discord.SelectOption(
-                label="Logs",
-                value="logs",
-                emoji="📋"
-            ),
-            discord.SelectOption(
-                label="Autorole",
-                value="autorole",
-                emoji="🎭"
-            ),
-            discord.SelectOption(
-                label="Voice",
-                value="voice",
-                emoji="🔊"
-            ),
-            discord.SelectOption(
-                label="Giveaway",
-                value="giveaway",
-                emoji="🎉"
-            ),
-            discord.SelectOption(
-                label="DM",
-                value="dm",
-                emoji="✉️"
-            ),
-            discord.SelectOption(
-                label="Language",
-                value="language",
-                emoji="🌐"
-            )
-        ]
-
-        super().__init__(
-            placeholder="Bir ayar kategorisi seçin...",
-            options=options,
-            custom_id="dynex_settings_main"
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        if not is_admin(interaction.user):
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Bu menüyü sadece yöneticiler kullanabilir.",
-                ephemeral=True
-            )
-
-        value = self.values[0]
-
-        if value == "ticket":
-            view = TicketSettingsView()
-            embed = ticket_settings_embed(interaction.guild)
-
-        elif value == "welcome":
-            view = WelcomeSettingsView()
-            embed = welcome_settings_embed(interaction.guild)
-
-        elif value == "moderation":
-            view = ModerationSettingsView()
-            embed = moderation_settings_embed(interaction.guild)
-
-        elif value == "logs":
-            view = LogsSettingsView()
-            embed = logs_settings_embed(interaction.guild)
-
-        elif value == "autorole":
-            view = AutoroleSettingsView()
-            embed = autorole_settings_embed(interaction.guild)
-
-        elif value == "voice":
-            view = VoiceSettingsView()
-            embed = voice_settings_embed(interaction.guild)
-
-        elif value == "giveaway":
-            view = GiveawaySettingsView()
-            embed = giveaway_settings_embed(interaction.guild)
-
-        elif value == "dm":
-            view = DmSettingsView()
-            embed = dm_settings_embed(interaction.guild)
-
-        else:
-            view = LanguageView()
-            embed = discord.Embed(
-                title="Language",
-                description="Sunucunun dilini seçin.",
-                color=discord.Color.from_rgb(0, 0, 0)
-            )
-
-        await interaction.response.edit_message(
-            embed=embed,
-            view=view
-        )
-
-
-class SettingsMainView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-        self.add_item(SettingsMainSelect())
-
-
-def settings_main_embed(guild):
-    return discord.Embed(
-        title=f"{EMOJIS['settings']} Dynex Ayarları",
-        description=(
-            "Aşağıdaki menüden ayarlamak istediğiniz sistemi seçin.\n\n"
-            "Ayarları değiştirdiğinizde config.json dosyasına kaydedilir."
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-
-# =========================================================
-# AYARLAR - TICKET
-# =========================================================
-
-def ticket_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["ticket"]
-
-    category = guild.get_channel(cfg.get("category_id")) if cfg.get("category_id") else None
-    role = guild.get_role(cfg.get("staff_role_id")) if cfg.get("staff_role_id") else None
-    channel = guild.get_channel(cfg.get("panel_channel_id")) if cfg.get("panel_channel_id") else None
-
-    options = cfg.get("options", [])
-
-    text = (
-        f"Kategori: {category.mention if category else 'Ayarlanmadı'}\n"
-        f"Yetkili rolü: {role.mention if role else 'Ayarlanmadı'}\n"
-        f"Panel kanalı: {channel.mention if channel else 'Ayarlanmadı'}\n"
-        f"Panel başlığı: `{cfg.get('panel_title')}`\n"
-        f"Panel açıklaması: `{cfg.get('panel_description')}`\n"
-        f"Buton: `{cfg.get('button_label')}`\n"
-        f"Buton emojisi: `{cfg.get('button_emoji') or 'Yok'}`\n"
-        f"Seçenek sayısı: `{len(options)}`"
-    )
-
-    return discord.Embed(
-        title="Ticket Ayarları",
-        description=text,
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-
-class BackToSettingsButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(
-            label="Geri",
-            style=discord.ButtonStyle.secondary,
-            emoji="↩️"
-        )
-
-    async def callback(self, interaction):
-        await interaction.response.edit_message(
-            embed=settings_main_embed(interaction.guild),
-            view=SettingsMainView()
-        )
-
-
-class TicketCategorySelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Ticket kategorisini seçin...",
-            channel_types=[discord.ChannelType.category],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_ticket_category"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["ticket"]["category_id"] = self.values[0].id
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=ticket_settings_embed(interaction.guild),
-            view=TicketSettingsView()
-        )
-
-
-class TicketStaffRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Ticket yetkili rolünü seçin...",
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_ticket_staff"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["ticket"]["staff_role_id"] = self.values[0].id
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=ticket_settings_embed(interaction.guild),
-            view=TicketSettingsView()
-        )
-
-
-class TicketPanelChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Panel kanalını seçin...",
-            channel_types=[
-                discord.ChannelType.text,
-                discord.ChannelType.news
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_ticket_panel_channel"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["ticket"]["panel_channel_id"] = self.values[0].id
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=ticket_settings_embed(interaction.guild),
-            view=TicketSettingsView()
-        )
-
-
-class TicketTextModal(discord.ui.Modal, title="Ticket Panel Ayarları"):
-    panel_title = discord.ui.TextInput(
-        label="Panel başlığı",
-        max_length=256,
-        required=True
-    )
-
-    panel_description = discord.ui.TextInput(
-        label="Panel açıklaması",
-        style=discord.TextStyle.paragraph,
-        max_length=1500,
-        required=True
-    )
-
-    button_label = discord.ui.TextInput(
-        label="Buton adı",
-        max_length=80,
-        required=True
-    )
-
-    button_emoji = discord.ui.TextInput(
-        label="Buton emojisi",
-        placeholder="🎫 / :dikkat: / <:isim:id> / boş",
-        max_length=100,
-        required=False
-    )
-
-    panel_image = discord.ui.TextInput(
-        label="Panel görsel URL",
-        placeholder="Boş bırakabilirsiniz",
-        max_length=500,
-        required=False
-    )
-
-    async def on_submit(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        emoji = self.button_emoji.value.strip()
-
-        if emoji and not emoji_exists(emoji, interaction.guild):
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Bu emoji sunucuda bulunamadı.",
-                ephemeral=True
-            )
-
-        cfg["ticket"]["panel_title"] = self.panel_title.value
-        cfg["ticket"]["panel_description"] = self.panel_description.value
-        cfg["ticket"]["button_label"] = self.button_label.value
-        cfg["ticket"]["button_emoji"] = emoji
-        cfg["ticket"]["panel_image"] = self.panel_image.value.strip() or None
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=ticket_settings_embed(interaction.guild),
-            view=TicketSettingsView()
-        )
-
-
-class TicketOptionModal(discord.ui.Modal, title="Ticket Seçeneği Ekle"):
-    name_input = discord.ui.TextInput(
-        label="Seçenek adı",
-        placeholder="Örn: Genel Destek",
-        max_length=80,
-        required=True
-    )
-
-    emoji_input = discord.ui.TextInput(
-        label="Emoji",
-        placeholder="🎫 / :dikkat: / <:isim:id> / boş",
-        max_length=100,
-        required=False
-    )
-
-    description_input = discord.ui.TextInput(
-        label="Açıklama",
-        max_length=150,
-        required=False
-    )
-
-    async def on_submit(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        emoji = self.emoji_input.value.strip()
-
-        if emoji and not emoji_exists(emoji, interaction.guild):
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Emoji bulunamadı.",
-                ephemeral=True
-            )
-
-        cfg["ticket"]["options"].append({
-            "name": self.name_input.value,
-            "emoji": emoji,
-            "description": self.description_input.value
-        })
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=ticket_settings_embed(interaction.guild),
-            view=TicketSettingsView()
-        )
-
-
-class TicketOptionButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(
-            label="Seçenek Ekle",
-            style=discord.ButtonStyle.primary,
-            emoji="➕",
-            row=3
-        )
-
-    async def callback(self, interaction):
-        await interaction.response.send_modal(TicketOptionModal())
-
-
-class TicketClearOptionsButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(
-            label="Seçenekleri Temizle",
-            style=discord.ButtonStyle.danger,
-            emoji="🗑️",
-            row=3
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["ticket"]["options"] = []
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=ticket_settings_embed(interaction.guild),
-            view=TicketSettingsView()
-        )
-
-
-class TicketSettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(TicketCategorySelect())
-        self.add_item(TicketStaffRoleSelect())
-        self.add_item(TicketPanelChannelSelect())
-        self.add_item(TicketOptionButton())
-        self.add_item(TicketClearOptionsButton())
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# AYARLAR - WELCOME
-# =========================================================
-
-def welcome_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["welcome"]
-
-    channel = (
-        guild.get_channel(cfg["channel_id"])
-        if cfg.get("channel_id")
-        else None
-    )
-
-    embed = discord.Embed(
-        title="Welcome Ayarları",
-        description=(
-            f"Kanal: {channel.mention if channel else 'Ayarlanmadı'}\n"
-            f"Başlık: `{cfg.get('title')}`\n"
-            f"Açıklama: `{cfg.get('description')}`\n"
-            f"Görsel: `{cfg.get('image') or 'Yok'}`\n"
-            f"DM: `{cfg.get('dm_message') or 'Kapalı'}`"
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-    return embed
-
-
-class WelcomeChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Hoş geldin kanalını seçin...",
-            channel_types=[
-                discord.ChannelType.text,
-                discord.ChannelType.news
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_welcome_channel"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["welcome"]["channel_id"] = self.values[0].id
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=welcome_settings_embed(interaction.guild),
-            view=WelcomeSettingsView()
-        )
-
-
-class WelcomeModal(discord.ui.Modal, title="Welcome Ayarları"):
-    title_input = discord.ui.TextInput(
-        label="Başlık",
-        max_length=256,
-        required=True
-    )
-
-    description_input = discord.ui.TextInput(
-        label="Açıklama",
-        style=discord.TextStyle.paragraph,
-        max_length=1500,
-        required=True
-    )
-
-    image_input = discord.ui.TextInput(
-        label="Görsel URL",
-        required=False,
-        max_length=500
-    )
-
-    dm_input = discord.ui.TextInput(
-        label="DM mesajı",
-        style=discord.TextStyle.paragraph,
-        required=False,
-        max_length=1500
-    )
-
-    async def on_submit(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["welcome"]["title"] = self.title_input.value
-        cfg["welcome"]["description"] = self.description_input.value
-        cfg["welcome"]["image"] = self.image_input.value.strip() or None
-        cfg["welcome"]["dm_message"] = self.dm_input.value.strip() or None
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=welcome_settings_embed(interaction.guild),
-            view=WelcomeSettingsView()
-        )
-
-
-class WelcomeSettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(WelcomeChannelSelect())
-
-        button = discord.ui.Button(
-            label="Mesaj Ayarları",
-            style=discord.ButtonStyle.primary,
-            emoji="✏️",
-            row=1
-        )
-
-        async def callback(interaction):
-            await interaction.response.send_modal(WelcomeModal())
-
-        button.callback = callback
-
-        self.add_item(button)
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# AYARLAR - MODERATION
-# =========================================================
-
-def moderation_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["moderation"]
-
-    log_channel = (
-        guild.get_channel(cfg["log_channel_id"])
-        if cfg.get("log_channel_id")
-        else None
-    )
-
-    return discord.Embed(
-        title="Moderation Ayarları",
-        description=(
-            f"Kötü kelime sayısı: `{len(cfg.get('bad_words', []))}`\n"
-            f"Uyarı limiti: `{cfg.get('warning_limit')}`\n"
-            f"Limit eylemi: `{cfg.get('warning_action')}`\n"
-            f"Timeout süresi: `{cfg.get('timeout_duration')} dakika`\n"
-            f"Anti-link: `{'Açık' if cfg.get('anti_link') else 'Kapalı'}`\n"
-            f"Anti-spam: `{'Açık' if cfg.get('anti_spam') else 'Kapalı'}`\n"
-            f"Log kanalı: {log_channel.mention if log_channel else 'Ayarlanmadı'}"
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-
-class ModerationLogChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Moderasyon log kanalını seçin...",
-            channel_types=[
-                discord.ChannelType.text,
-                discord.ChannelType.news
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_moderation_log"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["moderation"]["log_channel_id"] = self.values[0].id
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=moderation_settings_embed(interaction.guild),
-            view=ModerationSettingsView()
-        )
-
-
-class ModerationModal(discord.ui.Modal, title="Moderation Ayarları"):
-    bad_words = discord.ui.TextInput(
-        label="Kötü kelimeler",
-        placeholder="kelime1, kelime2, kelime3",
-        required=False,
-        max_length=1500
-    )
-
-    warning_limit = discord.ui.TextInput(
-        label="Uyarı limiti",
-        placeholder="3",
-        required=True,
-        max_length=3
-    )
-
-    warning_action = discord.ui.TextInput(
-        label="Limit eylemi",
-        placeholder="timeout / kick / ban",
-        required=True,
-        max_length=20
-    )
-
-    timeout_duration = discord.ui.TextInput(
-        label="Timeout süresi",
-        placeholder="10",
-        required=True,
-        max_length=5
-    )
-
-    async def on_submit(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        try:
-            limit = max(1, int(self.warning_limit.value))
-            timeout_duration = max(1, int(self.timeout_duration.value))
-        except ValueError:
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Sayısal değerleri doğru girin.",
-                ephemeral=True
-            )
-
-        action = self.warning_action.value.lower().strip()
-
-        if action not in ("timeout", "kick", "ban"):
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Eylem `timeout`, `kick` veya `ban` olmalı.",
-                ephemeral=True
-            )
-
-        words = [
-            x.strip().lower()
-            for x in self.bad_words.value.split(",")
-            if x.strip()
-        ]
-
-        cfg["moderation"]["bad_words"] = words
-        cfg["moderation"]["warning_limit"] = limit
-        cfg["moderation"]["warning_action"] = action
-        cfg["moderation"]["timeout_duration"] = timeout_duration
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=moderation_settings_embed(interaction.guild),
-            view=ModerationSettingsView()
-        )
-
-
-class ModerationToggleView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=300)
-
-        cfg = get_guild_config(0) if False else None
-
-        self.link_button = discord.ui.Button(
-            label="Anti-link",
-            style=discord.ButtonStyle.secondary,
-            row=0
-        )
-
-        self.spam_button = discord.ui.Button(
-            label="Anti-spam",
-            style=discord.ButtonStyle.secondary,
-            row=0
-        )
-
-        async def link_callback(interaction):
-            config = get_guild_config(interaction.guild.id)
-            config["moderation"]["anti_link"] = not config["moderation"]["anti_link"]
-            save_config()
-
-            await interaction.response.edit_message(
-                embed=moderation_settings_embed(interaction.guild),
-                view=ModerationSettingsView()
-            )
-
-        async def spam_callback(interaction):
-            config = get_guild_config(interaction.guild.id)
-            config["moderation"]["anti_spam"] = not config["moderation"]["anti_spam"]
-            save_config()
-
-            await interaction.response.edit_message(
-                embed=moderation_settings_embed(interaction.guild),
-                view=ModerationSettingsView()
-            )
-
-        self.link_button.callback = link_callback
-        self.spam_button.callback = spam_callback
-
-        self.add_item(self.link_button)
-        self.add_item(self.spam_button)
-
-
-class ModerationSettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(ModerationLogChannelSelect())
-
-        settings_button = discord.ui.Button(
-            label="Uyarı Ayarları",
-            style=discord.ButtonStyle.primary,
-            emoji="⚙️",
-            row=1
-        )
-
-        async def settings_callback(interaction):
-            await interaction.response.send_modal(ModerationModal())
-
-        settings_button.callback = settings_callback
-
-        self.add_item(settings_button)
-
-        link_button = discord.ui.Button(
-            label="Anti-link Aç/Kapat",
-            style=discord.ButtonStyle.secondary,
-            row=2
-        )
-
-        spam_button = discord.ui.Button(
-            label="Anti-spam Aç/Kapat",
-            style=discord.ButtonStyle.secondary,
-            row=2
-        )
-
-        async def link_callback(interaction):
-            cfg = get_guild_config(interaction.guild.id)
-            cfg["moderation"]["anti_link"] = not cfg["moderation"]["anti_link"]
-            save_config()
-
-            await interaction.response.edit_message(
-                embed=moderation_settings_embed(interaction.guild),
-                view=ModerationSettingsView()
-            )
-
-        async def spam_callback(interaction):
-            cfg = get_guild_config(interaction.guild.id)
-            cfg["moderation"]["anti_spam"] = not cfg["moderation"]["anti_spam"]
-            save_config()
-
-            await interaction.response.edit_message(
-                embed=moderation_settings_embed(interaction.guild),
-                view=ModerationSettingsView()
-            )
-
-        link_button.callback = link_callback
-        spam_button.callback = spam_callback
-
-        self.add_item(link_button)
-        self.add_item(spam_button)
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# AYARLAR - LOGS
-# =========================================================
-
-def logs_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["logs"]
-
-    channel = (
-        guild.get_channel(cfg["channel_id"])
-        if cfg.get("channel_id")
-        else None
-    )
-
-    enabled = []
-
-    for key in (
-        "delete",
-        "edit",
-        "join",
-        "leave",
-        "ban",
-        "kick",
-        "timeout"
+    if not await moderation_check(
+        interaction,
+        "manage_messages"
     ):
-        if cfg.get(key):
-            enabled.append(key)
+        return
 
-    return discord.Embed(
-        title="Logs Ayarları",
-        description=(
-            f"Log kanalı: {channel.mention if channel else 'Ayarlanmadı'}\n"
-            f"Aktif loglar: `{', '.join(enabled) if enabled else 'Yok'}`"
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
+    embed = discord.Embed(
+        title="📢 Duyuru",
+        description=mesaj,
+        color=black_color()
     )
 
-
-class LogsChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Log kanalını seçin...",
-            channel_types=[
-                discord.ChannelType.text,
-                discord.ChannelType.news
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_logs_channel"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-        cfg["logs"]["channel_id"] = self.values[0].id
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=logs_settings_embed(interaction.guild),
-            view=LogsSettingsView()
-        )
-
-
-class LogsToggleSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Mesaj silme", value="delete"),
-            discord.SelectOption(label="Mesaj düzenleme", value="edit"),
-            discord.SelectOption(label="Üye katılma", value="join"),
-            discord.SelectOption(label="Üye ayrılma", value="leave"),
-            discord.SelectOption(label="Ban", value="ban"),
-            discord.SelectOption(label="Kick", value="kick"),
-            discord.SelectOption(label="Timeout", value="timeout")
-        ]
-
-        super().__init__(
-            placeholder="Açıp kapatmak istediğiniz logu seçin...",
-            options=options,
-            custom_id="dynex_logs_toggle"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)["logs"]
-
-        key = self.values[0]
-        cfg[key] = not cfg.get(key, False)
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=logs_settings_embed(interaction.guild),
-            view=LogsSettingsView()
-        )
-
-
-class LogsSettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(LogsChannelSelect())
-        self.add_item(LogsToggleSelect())
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# AYARLAR - AUTOROLE
-# =========================================================
-
-def autorole_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["autorole"]
-
-    role = (
-        guild.get_role(cfg["role_id"])
-        if cfg.get("role_id")
-        else None
-    )
-
-    return discord.Embed(
-        title="Autorole Ayarları",
-        description=(
-            f"Katılanlara verilecek rol: "
-            f"{role.mention if role else 'Ayarlanmadı'}"
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-
-class AutoroleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Autorole seçin...",
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_autorole"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["autorole"]["role_id"] = self.values[0].id
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=autorole_settings_embed(interaction.guild),
-            view=AutoroleSettingsView()
-        )
-
-
-class AutoroleDisableButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(
-            label="Autorole Kapat",
-            style=discord.ButtonStyle.danger,
-            row=1
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["autorole"]["role_id"] = None
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=autorole_settings_embed(interaction.guild),
-            view=AutoroleSettingsView()
-        )
-
-
-class AutoroleSettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(AutoroleSelect())
-        self.add_item(AutoroleDisableButton())
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# AYARLAR - VOICE
-# =========================================================
-
-def voice_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["voice"]
-
-    channel = (
-        guild.get_channel(cfg["channel_id"])
-        if cfg.get("channel_id")
-        else None
-    )
-
-    return discord.Embed(
-        title="Voice Ayarları",
-        description=(
-            f"Bildirim kanalı: {channel.mention if channel else 'Ayarlanmadı'}\n"
-            f"Katılma mesajı: `{cfg.get('join_message')}`\n"
-            f"Ayrılma mesajı: `{cfg.get('leave_message')}`"
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-
-class VoiceNotificationChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Ses bildirim kanalını seçin...",
-            channel_types=[
-                discord.ChannelType.text,
-                discord.ChannelType.news
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_voice_notification"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["voice"]["channel_id"] = self.values[0].id
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=voice_settings_embed(interaction.guild),
-            view=VoiceSettingsView()
-        )
-
-
-class VoiceModal(discord.ui.Modal, title="Voice Ayarları"):
-    join_message = discord.ui.TextInput(
-        label="Katılma mesajı",
-        max_length=500,
-        required=True
-    )
-
-    leave_message = discord.ui.TextInput(
-        label="Ayrılma mesajı",
-        max_length=500,
-        required=True
-    )
-
-    async def on_submit(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["voice"]["join_message"] = self.join_message.value
-        cfg["voice"]["leave_message"] = self.leave_message.value
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=voice_settings_embed(interaction.guild),
-            view=VoiceSettingsView()
-        )
-
-
-class VoiceSettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(VoiceNotificationChannelSelect())
-
-        button = discord.ui.Button(
-            label="Mesajları Düzenle",
-            style=discord.ButtonStyle.primary,
-            row=1
-        )
-
-        async def callback(interaction):
-            await interaction.response.send_modal(VoiceModal())
-
-        button.callback = callback
-
-        self.add_item(button)
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# AYARLAR - GIVEAWAY
-# =========================================================
-
-def giveaway_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["giveaway"]
-
-    role = (
-        guild.get_role(cfg["staff_role_id"])
-        if cfg.get("staff_role_id")
-        else None
-    )
-
-    channel = (
-        guild.get_channel(cfg["channel_id"])
-        if cfg.get("channel_id")
-        else None
-    )
-
-    log_channel = (
-        guild.get_channel(cfg["log_channel_id"])
-        if cfg.get("log_channel_id")
-        else None
-    )
-
-    return discord.Embed(
-        title="Giveaway Ayarları",
-        description=(
-            f"Yetkili rolü: {role.mention if role else 'Ayarlanmadı'}\n"
-            f"Kanal: {channel.mention if channel else 'Ayarlanmadı'}\n"
-            f"Log kanalı: {log_channel.mention if log_channel else 'Ayarlanmadı'}\n"
-            f"Varsayılan kazanan: `{cfg.get('default_winners')}`\n"
-            f"Varsayılan süre: `{cfg.get('default_duration')} dakika`"
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-
-class GiveawayStaffRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Çekiliş yetkili rolünü seçin...",
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_giveaway_staff"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["giveaway"]["staff_role_id"] = self.values[0].id
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=giveaway_settings_embed(interaction.guild),
-            view=GiveawaySettingsView()
-        )
-
-
-class GiveawayChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Çekiliş kanalını seçin...",
-            channel_types=[
-                discord.ChannelType.text,
-                discord.ChannelType.news
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_giveaway_channel"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["giveaway"]["channel_id"] = self.values[0].id
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=giveaway_settings_embed(interaction.guild),
-            view=GiveawaySettingsView()
-        )
-
-
-class GiveawayLogChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="Çekiliş log kanalını seçin...",
-            channel_types=[
-                discord.ChannelType.text,
-                discord.ChannelType.news
-            ],
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_giveaway_log"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["giveaway"]["log_channel_id"] = self.values[0].id
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=giveaway_settings_embed(interaction.guild),
-            view=GiveawaySettingsView()
-        )
-
-
-class GiveawayDefaultsModal(discord.ui.Modal, title="Giveaway Varsayılanları"):
-    winners = discord.ui.TextInput(
-        label="Kazanan sayısı",
-        placeholder="1",
-        required=True,
-        max_length=3
-    )
-
-    duration = discord.ui.TextInput(
-        label="Süre dakika",
-        placeholder="10",
-        required=True,
-        max_length=3
-    )
-
-    async def on_submit(self, interaction):
-        try:
-            winners = max(1, int(self.winners.value))
-            duration = max(1, min(40, int(self.duration.value)))
-        except ValueError:
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Sayısal değer girin.",
-                ephemeral=True
-            )
-
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["giveaway"]["default_winners"] = winners
-        cfg["giveaway"]["default_duration"] = duration
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=giveaway_settings_embed(interaction.guild),
-            view=GiveawaySettingsView()
-        )
-
-
-class GiveawaySettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(GiveawayStaffRoleSelect())
-        self.add_item(GiveawayChannelSelect())
-        self.add_item(GiveawayLogChannelSelect())
-
-        button = discord.ui.Button(
-            label="Varsayılanlar",
-            style=discord.ButtonStyle.primary,
-            row=3
-        )
-
-        async def callback(interaction):
-            await interaction.response.send_modal(GiveawayDefaultsModal())
-
-        button.callback = callback
-
-        self.add_item(button)
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# AYARLAR - DM
-# =========================================================
-
-def dm_settings_embed(guild):
-    cfg = get_guild_config(guild.id)["dm"]
-
-    roles = []
-
-    for role_id in cfg.get("allowed_role_ids", []):
-        role = guild.get_role(role_id)
-        if role:
-            roles.append(role.mention)
-
-    return discord.Embed(
-        title="DM Ayarları",
-        description=(
-            "Aşağıdaki roller `/dm` komutunu kullanabilir.\n\n"
-            f"{', '.join(roles) if roles else 'Rol ayarlanmadı.'}\n\n"
-            "Yöneticiler her zaman `/dm` kullanabilir."
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-
-class DmSettingsRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(
-            placeholder="DM kullanabilecek rolü seçin...",
-            min_values=1,
-            max_values=1,
-            custom_id="dynex_dm_settings_role"
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        role_id = self.values[0].id
-
-        if role_id not in cfg["dm"]["allowed_role_ids"]:
-            cfg["dm"]["allowed_role_ids"].append(role_id)
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=dm_settings_embed(interaction.guild),
-            view=DmSettingsView()
-        )
-
-
-class DmClearRolesButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(
-            label="Rolleri Temizle",
-            style=discord.ButtonStyle.danger,
-            row=1
-        )
-
-    async def callback(self, interaction):
-        cfg = get_guild_config(interaction.guild.id)
-
-        cfg["dm"]["allowed_role_ids"] = []
-
-        save_config()
-
-        await interaction.response.edit_message(
-            embed=dm_settings_embed(interaction.guild),
-            view=DmSettingsView()
-        )
-
-
-class DmSettingsView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=600)
-
-        self.add_item(DmSettingsRoleSelect())
-        self.add_item(DmClearRolesButton())
-        self.add_item(BackToSettingsButton())
-
-
-# =========================================================
-# /AYARLAR
-# =========================================================
-
-@tree.command(name="ayarlar", description="Dynex sunucu ayarlarını açar.")
-@app_commands.checks.has_permissions(administrator=True)
-async def settings(interaction: discord.Interaction):
     await interaction.response.send_message(
-        embed=settings_main_embed(interaction.guild),
-        view=SettingsMainView(),
-        ephemeral=True
+        embed=embed
     )
 
 
 # =========================================================
-# TICKET
+# TICKET - KAPAT
 # =========================================================
 
-class TicketCloseButton(discord.ui.Button):
+class TicketCloseView(
+    discord.ui.View
+):
+
     def __init__(self):
+
         super().__init__(
-            label="Ticket Kapat",
-            style=discord.ButtonStyle.danger,
-            emoji="🔒",
-            custom_id="dynex_ticket_close"
+            timeout=None
         )
 
-    async def callback(self, interaction):
-        channel = interaction.channel
+    @discord.ui.button(
+        label="Ticket Kapat",
+        style=discord.ButtonStyle.danger,
+        custom_id="dynex_ticket_close"
+    )
+    async def close_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        if not interaction.channel.name.startswith(
+            "ticket-"
+        ):
+            return
 
         await interaction.response.send_message(
-            f"{EMOJIS['yes']} Ticket kapatılıyor...",
-            ephemeral=True
+            "Ticket kapatılıyor..."
         )
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(
+            1
+        )
 
         try:
-            await channel.delete(reason="Ticket kapatıldı.")
-        except Exception:
+            await interaction.channel.delete()
+        except discord.HTTPException:
             pass
 
 
-class TicketCloseView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(TicketCloseButton())
+# =========================================================
+# TICKET - AÇ
+# =========================================================
 
+class TicketOpenView(
+    discord.ui.View
+):
 
-class TicketOpenButton(discord.ui.Button):
-    def __init__(self, guild):
-        cfg = get_guild_config(guild.id)["ticket"]
-
-        emoji_value = cfg.get("button_emoji")
-        emoji = parse_emoji(emoji_value, guild)
+    def __init__(
+        self,
+        guild=None
+    ):
 
         super().__init__(
-            label=cfg.get("button_label") or "Destek Talebi",
+            timeout=None
+        )
+
+        config = None
+
+        if guild:
+
+            config = get_guild_config(
+                guild.id
+            )["ticket"]
+
+        button = discord.ui.Button(
+            label=(
+                config.get(
+                    "button_label"
+                )
+                if config
+                else "Destek Talebi"
+            ) or "Destek Talebi",
+
             style=discord.ButtonStyle.primary,
-            emoji=emoji,
+
             custom_id="dynex_ticket_open"
         )
 
-    async def callback(self, interaction):
-        guild = interaction.guild
-        cfg = get_guild_config(guild.id)["ticket"]
+        if guild and config:
 
-        category = (
-            guild.get_channel(cfg.get("category_id"))
-            if cfg.get("category_id")
-            else None
-        )
-
-        staff_role = (
-            guild.get_role(cfg.get("staff_role_id"))
-            if cfg.get("staff_role_id")
-            else None
-        )
-
-        if not category:
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Ticket kategorisi ayarlanmamış.",
-                ephemeral=True
+            emoji = parse_emoji(
+                config.get(
+                    "button_emoji"
+                ),
+                guild
             )
 
-        existing = discord.utils.find(
-            lambda c: (
-                isinstance(c, discord.TextChannel)
-                and c.topic
-                and f"ticket-owner:{interaction.user.id}" in c.topic
-            ),
-            guild.text_channels
+            if emoji:
+
+                button.emoji = emoji
+
+        button.callback = self.open_ticket
+
+        self.add_item(
+            button
         )
 
-        if existing:
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Zaten açık bir ticketınız var: {existing.mention}",
-                ephemeral=True
+    async def open_ticket(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        guild = interaction.guild
+
+        config = get_guild_config(
+            guild.id
+        )["ticket"]
+
+        # Aynı kişinin açık ticketini kontrol et
+
+        for channel in guild.text_channels:
+
+            if channel.topic == (
+                f"ticket-owner:{interaction.user.id}"
+            ):
+
+                await interaction.response.send_message(
+                    f"{EMOJI['no']} Zaten açık ticketin var: "
+                    f"{channel.mention}",
+                    ephemeral=True
+                )
+
+                return
+
+        category = None
+
+        if config.get(
+            "category_id"
+        ):
+
+            category = guild.get_channel(
+                config["category_id"]
             )
 
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(
-                view_channel=False
-            ),
-            interaction.user: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True,
-                attach_files=True
-            ),
-            guild.me: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_channels=True,
-                read_message_history=True
-            )
+
+            guild.default_role:
+                discord.PermissionOverwrite(
+                    view_channel=False
+                ),
+
+            interaction.user:
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                ),
+
+            guild.me:
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True
+                )
         }
 
-        if staff_role:
-            overwrites[staff_role] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True
-            )
-
-        channel = await guild.create_text_channel(
-            name=f"ticket-{clean_channel_name(interaction.user.name)}",
-            category=category,
-            overwrites=overwrites,
-            topic=f"ticket-owner:{interaction.user.id}"
+        staff_role_id = config.get(
+            "staff_role_id"
         )
 
-        embed = discord.Embed(
-            title="Ticket",
-            description=(
-                f"{interaction.user.mention} ticketınız oluşturuldu.\n"
-                "Yetkililer kısa süre içerisinde ilgilenecektir."
-            ),
-            color=discord.Color.from_rgb(0, 0, 0)
+        if staff_role_id:
+
+            staff_role = guild.get_role(
+                staff_role_id
+            )
+
+            if staff_role:
+
+                overwrites[staff_role] = (
+                    discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        read_message_history=True
+                    )
+                )
+
+        channel = await guild.create_text_channel(
+            f"ticket-{interaction.user.name}"[:90],
+            category=category,
+            overwrites=overwrites,
+            topic=(
+                f"ticket-owner:"
+                f"{interaction.user.id}"
+            )
         )
 
         await channel.send(
-            content=staff_role.mention if staff_role else None,
-            embed=embed,
+            f"{interaction.user.mention} ticket oluşturuldu.",
             view=TicketCloseView()
         )
 
         await interaction.response.send_message(
-            f"{EMOJIS['yes']} Ticket oluşturuldu: {channel.mention}",
+            f"{EMOJI['yes']} Ticket oluşturuldu: "
+            f"{channel.mention}",
             ephemeral=True
         )
 
 
-class TicketOpenView(discord.ui.View):
-    def __init__(self, guild):
-        super().__init__(timeout=None)
-        self.add_item(TicketOpenButton(guild))
+# =========================================================
+# TICKET PANEL
+# =========================================================
 
+@bot.tree.command(
+    name="ticket-panel",
+    description="Ticket paneli gönder"
+)
+async def ticket_panel(
+    interaction: discord.Interaction
+):
 
-@tree.command(name="ticket-panel", description="Ayarlanmış ticket panelini gönderir.")
-@app_commands.checks.has_permissions(administrator=True)
-async def ticket_panel(interaction: discord.Interaction):
-    cfg = get_guild_config(interaction.guild.id)["ticket"]
+    if not interaction.user.guild_permissions.manage_guild:
 
-    channel = (
-        interaction.guild.get_channel(cfg.get("panel_channel_id"))
-        if cfg.get("panel_channel_id")
-        else None
-    )
-
-    if not channel:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Ticket panel kanalı ayarlanmamış.",
+        await interaction.response.send_message(
+            t(
+                interaction.guild,
+                "no_permission"
+            ),
             ephemeral=True
         )
+
+        return
+
+    config = get_guild_config(
+        interaction.guild.id
+    )["ticket"]
+
+    channel = interaction.channel
+
+    if config.get(
+        "panel_channel_id"
+    ):
+
+        configured_channel = interaction.guild.get_channel(
+            config["panel_channel_id"]
+        )
+
+        if configured_channel:
+
+            channel = configured_channel
 
     embed = discord.Embed(
-        title=cfg.get("panel_title") or "Destek Talebi",
-        description=cfg.get("panel_description") or "",
-        color=discord.Color.from_rgb(0, 0, 0)
+        title=config.get(
+            "panel_title"
+        ) or "Destek Talebi",
+
+        description=config.get(
+            "panel_description"
+        ) or "Destek almak için butona bas.",
+
+        color=black_color()
     )
 
-    if cfg.get("panel_image"):
-        embed.set_image(url=cfg["panel_image"])
+    if config.get(
+        "panel_image"
+    ):
+
+        embed.set_image(
+            url=config["panel_image"]
+        )
 
     await channel.send(
         embed=embed,
-        view=TicketOpenView(interaction.guild)
+        view=TicketOpenView(
+            interaction.guild
+        )
     )
 
     await interaction.response.send_message(
-        f"{EMOJIS['yes']} Ticket paneli {channel.mention} kanalına gönderildi.",
+        f"{EMOJI['yes']} Ticket paneli gönderildi.",
         ephemeral=True
     )
 
 
 # =========================================================
-# GIVEAWAY
+# TOPLU DM
 # =========================================================
 
-class GiveawayJoinButton(discord.ui.Button):
-    def __init__(self, message_id):
-        super().__init__(
-            label="Çekilişe Katıl",
-            style=discord.ButtonStyle.primary,
-            emoji="🎉",
-            custom_id=f"cekilise_katil:{message_id}"
+@bot.tree.command(
+    name="dm",
+    description="Bir role toplu DM gönder"
+)
+@app_commands.describe(
+    rol="Hedef rol"
+)
+async def dm(
+    interaction: discord.Interaction,
+    rol: discord.Role
+):
+
+    config = get_guild_config(
+        interaction.guild.id
+    )
+
+    allowed_roles = config["dm"].get(
+        "allowed_role_ids",
+        []
+    )
+
+    has_access = (
+        interaction.user.guild_permissions.administrator
+        or any(
+            role.id in allowed_roles
+            for role in interaction.user.roles
+        )
+    )
+
+    if not has_access:
+
+        await interaction.response.send_message(
+            t(
+                interaction.guild,
+                "no_permission"
+            ),
+            ephemeral=True
         )
 
-    async def callback(self, interaction):
-        data = GIVEAWAYS.get(self.view.message_id)
+        return
 
-        if not data:
-            return await interaction.response.send_message(
-                f"{EMOJIS['no']} Bu çekiliş sona ermiş.",
-                ephemeral=True
-            )
+    class DMModal(
+        discord.ui.Modal,
+        title="Toplu DM"
+    ):
 
-        if interaction.user.id in data["participants"]:
-            data["participants"].remove(interaction.user.id)
-            joined = False
-        else:
-            data["participants"].add(interaction.user.id)
-            joined = True
-
-        await interaction.response.edit_message(
-            embed=build_giveaway_embed(data),
-            view=self.view
+        baslik = discord.ui.TextInput(
+            label="Başlık",
+            max_length=100
         )
 
-        if joined:
-            await interaction.followup.send(
-                f"{EMOJIS['yes']} Çekilişe katıldınız.",
+        mesaj = discord.ui.TextInput(
+            label="Mesaj",
+            style=discord.TextStyle.paragraph,
+            max_length=2000
+        )
+
+        async def on_submit(
+            self,
+            modal_interaction
+        ):
+
+            await modal_interaction.response.send_message(
+                "DM gönderimi başladı.",
                 ephemeral=True
             )
-        else:
-            await interaction.followup.send(
-                "Çekilişten çıktınız.",
-                ephemeral=True
-            )
 
+            sent = 0
 
-class GiveawayView(discord.ui.View):
-    def __init__(self, message_id):
-        super().__init__(timeout=None)
-        self.message_id = message_id
-        self.add_item(GiveawayJoinButton(message_id))
+            for member in rol.members:
 
+                if member.bot:
+                    continue
 
-def build_giveaway_embed(data):
-    remaining = max(
-        0,
-        int(data["end_time"] - time.time())
-    )
+                try:
 
-    embed = discord.Embed(
-        title="🎉 Çekiliş",
-        description=(
-            f"**Ödül:** {data['reward']}\n"
-            f"**Kazanan:** {data['winners']}\n"
-            f"**Katılımcı:** {len(data['participants'])}\n"
-            f"**Bitiş:** {format_duration(remaining)}"
-        ),
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
+                    await member.send(
+                        f"**{self.baslik.value}**\n\n"
+                        f"{self.mesaj.value}"
+                    )
 
-    return embed
+                    sent += 1
 
+                except discord.HTTPException:
+                    pass
 
-async def finish_giveaway(message_id):
-    data = GIVEAWAYS.get(message_id)
-
-    if not data:
-        return
-
-    channel = bot.get_channel(data["channel_id"])
-
-    if not channel:
-        GIVEAWAYS.pop(message_id, None)
-        return
-
-    try:
-        message = await channel.fetch_message(message_id)
-    except Exception:
-        GIVEAWAYS.pop(message_id, None)
-        return
-
-    participants = list(data["participants"])
-
-    if participants:
-        winners_count = min(data["winners"], len(participants))
-        winner_ids = random.sample(participants, winners_count)
-
-        mentions = ", ".join(f"<@{uid}>" for uid in winner_ids)
-
-        result = f"🎉 Kazananlar: {mentions}\nÖdül: **{data['reward']}**"
-    else:
-        result = "Çekilişe kimse katılmadığı için kazanan olmadı."
-
-    embed = discord.Embed(
-        title="🎉 Çekiliş Sona Erdi",
-        description=result,
-        color=discord.Color.from_rgb(0, 0, 0)
-    )
-
-    try:
-        await message.edit(embed=embed, view=None)
-    except Exception:
-        pass
-
-    cfg = get_guild_config(data["guild_id"])
-    log_channel_id = cfg["giveaway"].get("log_channel_id")
-
-    if log_channel_id:
-        log_channel = channel.guild.get_channel(log_channel_id)
-
-        if log_channel:
-            try:
-                await log_channel.send(
-                    f"Çekiliş sona erdi. Ödül: **{data['reward']}**"
+                await asyncio.sleep(
+                    0.15
                 )
-            except Exception:
+
+            try:
+
+                await modal_interaction.followup.send(
+                    f"{EMOJI['yes']} "
+                    f"{sent} kişiye gönderildi.",
+                    ephemeral=True
+                )
+
+            except discord.HTTPException:
                 pass
 
-    GIVEAWAYS.pop(message_id, None)
-
-
-@tree.command(name="çekiliş", description="Çekiliş başlatır.")
-@app_commands.describe(
-    ödül="Çekiliş ödülü.",
-    kazanan_sayısı="Kazanan sayısı.",
-    süre="Süre dakika olarak, en fazla 40."
-)
-async def giveaway(
-    interaction: discord.Interaction,
-    ödül: str,
-    kazanan_sayısı: app_commands.Range[int, 1, 20],
-    süre: app_commands.Range[int, 1, 40]
-):
-    cfg = get_guild_config(interaction.guild.id)
-
-    if not can_manage_giveaway(interaction.user, cfg):
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Çekiliş başlatma yetkiniz yok.",
-            ephemeral=True
-        )
-
-    target_channel = (
-        interaction.guild.get_channel(cfg["giveaway"].get("channel_id"))
-        if cfg["giveaway"].get("channel_id")
-        else interaction.channel
-    )
-
-    await interaction.response.defer(ephemeral=True)
-
-    data = {
-        "guild_id": interaction.guild.id,
-        "channel_id": target_channel.id,
-        "reward": ödül,
-        "winners": kazanan_sayısı,
-        "participants": set(),
-        "end_time": time.time() + süre * 60
-    }
-
-    embed = build_giveaway_embed(data)
-
-    message = await target_channel.send(
-        embed=embed,
-        view=GiveawayView(0)
-    )
-
-    data["message_id"] = message.id
-    GIVEAWAYS[message.id] = data
-
-    await message.edit(
-        embed=build_giveaway_embed(data),
-        view=GiveawayView(message.id)
-    )
-
-    await interaction.followup.send(
-        f"{EMOJIS['yes']} Çekiliş başlatıldı: {message.jump_url}",
-        ephemeral=True
-    )
-
-    await asyncio.sleep(süre * 60)
-
-    await finish_giveaway(message.id)
-
-
-@tree.command(name="çekiliş-bitir", description="Bir çekilişi erken bitirir.")
-@app_commands.describe(mesaj_id="Çekiliş mesaj ID'si.")
-async def end_giveaway(
-    interaction: discord.Interaction,
-    mesaj_id: str
-):
-    cfg = get_guild_config(interaction.guild.id)
-
-    if not can_manage_giveaway(interaction.user, cfg):
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Çekiliş bitirme yetkiniz yok.",
-            ephemeral=True
-        )
-
-    try:
-        message_id = int(mesaj_id)
-    except ValueError:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Geçerli bir mesaj ID girin.",
-            ephemeral=True
-        )
-
-    if message_id not in GIVEAWAYS:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Bu çekiliş bulunamadı.",
-            ephemeral=True
-        )
-
-    await finish_giveaway(message_id)
-
-    await interaction.response.send_message(
-        f"{EMOJIS['yes']} Çekiliş bitirildi.",
-        ephemeral=True
+    await interaction.response.send_modal(
+        DMModal()
     )
 
 
 # =========================================================
-# EĞLENCE
-# =========================================================
-
-@tree.command(name="zar", description="Zar atar.")
-async def dice(interaction: discord.Interaction):
-    number = random.randint(1, 6)
-
-    await interaction.response.send_message(
-        f"🎲 Zar sonucu: **{number}**"
-    )
-
-
-@tree.command(name="yazı-tura", description="Yazı veya tura atar.")
-async def coin(interaction: discord.Interaction):
-    result = random.choice(["Yazı", "Tura"])
-
-    await interaction.response.send_message(
-        f"🪙 Sonuç: **{result}**"
-    )
-
-
-@tree.command(name="8ball", description="8ball sorusunu cevaplar.")
-@app_commands.describe(soru="Sorunuz.")
-async def eight_ball(
-    interaction: discord.Interaction,
-    soru: str
-):
-    answers = [
-        "Evet.",
-        "Hayır.",
-        "Büyük ihtimalle.",
-        "Pek sanmıyorum.",
-        "Kesinlikle.",
-        "Bunu zaman gösterecek.",
-        "Şimdilik belli değil."
-    ]
-
-    await interaction.response.send_message(
-        f"🎱 **{random.choice(answers)}**"
-    )
-
-
-@tree.command(name="sayı-tahmin", description="1-100 arasında sayı tahmin eder.")
-async def number_guess(interaction: discord.Interaction):
-    number = random.randint(1, 100)
-
-    await interaction.response.send_message(
-        f"🎯 Aklımdan **1-100** arasında bir sayı tuttum.\n"
-        f"Sayım: **{number}**",
-        ephemeral=True
-    )
-
-
-# =========================================================
-# SAYI OYUNU
-# =========================================================
-
-@tree.command(name="sayı-oyunu-ayarla", description="Sayı oyununu başlatır.")
-@app_commands.describe(
-    hedef="Ulaşılacak sayı.",
-    kanal="Oyunun oynanacağı kanal."
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def number_game_setup(
-    interaction: discord.Interaction,
-    hedef: app_commands.Range[int, 1, 100000],
-    kanal: discord.TextChannel = None
-):
-    cfg = get_guild_config(interaction.guild.id)
-
-    kanal = kanal or interaction.channel
-
-    cfg["games"]["number_channel_id"] = kanal.id
-    cfg["games"]["number_target"] = hedef
-    cfg["games"]["number_current"] = 0
-    cfg["games"]["number_started"] = True
-
-    save_config()
-
-    await interaction.response.send_message(
-        f"{EMOJIS['yes']} Sayı oyunu {kanal.mention} kanalında başlatıldı.\n"
-        f"Hedef: **{hedef}**"
-    )
-
-
-@tree.command(name="sayı-oyunu-durdur", description="Sayı oyununu durdurur.")
-@app_commands.checks.has_permissions(administrator=True)
-async def number_game_stop(interaction: discord.Interaction):
-    cfg = get_guild_config(interaction.guild.id)
-
-    cfg["games"]["number_started"] = False
-
-    save_config()
-
-    await interaction.response.send_message(
-        f"{EMOJIS['yes']} Sayı oyunu durduruldu."
-    )
-
-
-# =========================================================
-# KELİME OYUNU
-# =========================================================
-
-@tree.command(name="kelime-oyunu-ayarla", description="Kelime oyununu başlatır.")
-@app_commands.describe(kanal="Oyunun oynanacağı kanal.")
-@app_commands.checks.has_permissions(administrator=True)
-async def word_game_setup(
-    interaction: discord.Interaction,
-    kanal: discord.TextChannel = None
-):
-    cfg = get_guild_config(interaction.guild.id)
-
-    kanal = kanal or interaction.channel
-
-    cfg["games"]["word_channel_id"] = kanal.id
-    cfg["games"]["word_started"] = True
-    cfg["games"]["word_current"] = None
-
-    save_config()
-
-    await interaction.response.send_message(
-        f"{EMOJIS['yes']} Kelime oyunu {kanal.mention} kanalında başlatıldı."
-    )
-
-
-@tree.command(name="kelime-oyunu-durdur", description="Kelime oyununu durdurur.")
-@app_commands.checks.has_permissions(administrator=True)
-async def word_game_stop(interaction: discord.Interaction):
-    cfg = get_guild_config(interaction.guild.id)
-
-    cfg["games"]["word_started"] = False
-
-    save_config()
-
-    await interaction.response.send_message(
-        f"{EMOJIS['yes']} Kelime oyunu durduruldu."
-    )
-
-
-@tree.command(name="kelime-ekle", description="Kelime oyununa kelime ekler.")
-@app_commands.describe(kelime="Eklenecek kelime.")
-@app_commands.checks.has_permissions(administrator=True)
-async def add_word(
-    interaction: discord.Interaction,
-    kelime: str
-):
-    cfg = get_guild_config(interaction.guild.id)
-
-    kelime = kelime.strip().lower()
-
-    if not kelime:
-        return await interaction.response.send_message(
-            f"{EMOJIS['no']} Kelime boş olamaz.",
-            ephemeral=True
-        )
-
-    if kelime not in cfg["games"]["words"]:
-        cfg["games"]["words"].append(kelime)
-
-    save_config()
-
-    await interaction.response.send_message(
-        f"{EMOJIS['yes']} `{kelime}` kelimesi eklendi."
-    )
-
-
-@tree.command(name="kelime-çıkar", description="Kelime oyunundan kelime çıkarır.")
-@app_commands.describe(kelime="Çıkarılacak kelime.")
-@app_commands.checks.has_permissions(administrator=True)
-async def remove_word(
-    interaction: discord.Interaction,
-    kelime: str
-):
-    cfg = get_guild_config(interaction.guild.id)
-
-    kelime = kelime.strip().lower()
-
-    if kelime in cfg["games"]["words"]:
-        cfg["games"]["words"].remove(kelime)
-        save_config()
-
-        return await interaction.response.send_message(
-            f"{EMOJIS['yes']} `{kelime}` kelimesi çıkarıldı."
-        )
-
-    await interaction.response.send_message(
-        f"{EMOJIS['no']} Bu kelime kayıtlı değil.",
-        ephemeral=True
-    )
-
-
-# =========================================================
-# MESAJ SİSTEMLERİ
+# KARŞILAMA
 # =========================================================
 
 @bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
+async def on_member_join(
+    member: discord.Member
+):
+
+    config = get_guild_config(
+        member.guild.id
+    )
+
+    welcome = config["welcome"]
+
+    channel = None
+
+    if welcome.get(
+        "channel_id"
+    ):
+
+        channel = member.guild.get_channel(
+            welcome["channel_id"]
+        )
+
+    if channel:
+
+        description = welcome[
+            "description"
+        ].format(
+            member=member.mention
+        )
+
+        embed = discord.Embed(
+            title=welcome["title"],
+            description=description,
+            color=black_color()
+        )
+
+        if welcome.get(
+            "image"
+        ):
+
+            embed.set_image(
+                url=welcome["image"]
+            )
+
+        try:
+
+            await channel.send(
+                embed=embed
+            )
+
+        except discord.HTTPException:
+            pass
+
+    if welcome.get(
+        "dm_message"
+    ):
+
+        try:
+
+            await member.send(
+                welcome[
+                    "dm_message"
+                ].format(
+                    member=member.mention,
+                    guild=member.guild.name
+                )
+            )
+
+        except discord.HTTPException:
+            pass
+
+    role_id = config["autorole"].get(
+        "role_id"
+    )
+
+    if role_id:
+
+        role = member.guild.get_role(
+            role_id
+        )
+
+        if role:
+
+            try:
+
+                await member.add_roles(
+                    role
+                )
+
+            except discord.HTTPException:
+                pass
+
+    await send_log(
+        member.guild,
+        "join",
+        "Üye katıldı",
+        member.mention
+    )
+
+
+# =========================================================
+# ÜYE AYRILDI
+# =========================================================
+
+@bot.event
+async def on_member_remove(
+    member
+):
+
+    await send_log(
+        member.guild,
+        "leave",
+        "Üye ayrıldı",
+        member.mention
+    )
+
+
+# =========================================================
+# MESAJ SİLİNDİ
+# =========================================================
+
+@bot.event
+async def on_message_delete(
+    message
+):
 
     if not message.guild:
         return
 
-    cfg = get_guild_config(message.guild.id)
-
-    # -------------------------
-    # SAYI OYUNU
-    # -------------------------
-
-    games = cfg["games"]
-
-    if (
-        games.get("number_started")
-        and games.get("number_channel_id") == message.channel.id
-    ):
-        try:
-            number = int(message.content.strip())
-        except ValueError:
-            number = None
-
-        if number is not None:
-            current = int(games.get("number_current", 0))
-            target = int(games.get("number_target", 50))
-
-            if number == current + 1:
-                games["number_current"] = number
-
-                try:
-                    await message.add_reaction("✅")
-                except Exception:
-                    pass
-
-                if number >= target:
-                    games["number_started"] = False
-
-                    await message.channel.send(
-                        f"🎉 Tebrikler! **{message.author.mention}** "
-                        f"hedef olan **{target}** sayısına ulaştı."
-                    )
-
-                save_config()
-
-            elif number != current:
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-
-                await send_log(
-                    message.guild,
-                    "Sayı Oyunu Hatası",
-                    f"{message.author.mention} yanlış sayı gönderdi.",
-                    None
-                )
-
-    # -------------------------
-    # KELİME OYUNU
-    # -------------------------
-
-    if (
-        games.get("word_started")
-        and games.get("word_channel_id") == message.channel.id
-    ):
-        word = message.content.strip().lower()
-
-        if games.get("words"):
-            if word in games["words"]:
-                games["word_current"] = word
-
-                try:
-                    await message.add_reaction("✅")
-                except Exception:
-                    pass
-
-                save_config()
-
-        elif games.get("word_current"):
-            previous = games["word_current"]
-
-            if word.startswith(previous[-1:]):
-                games["word_current"] = word
-                save_config()
-
-    # -------------------------
-    # ANTI-LINK
-    # -------------------------
-
-    moderation = cfg["moderation"]
-
-    if moderation.get("anti_link"):
-        if re.search(r"(https?://|www\.)", message.content.lower()):
-            if not message.author.guild_permissions.manage_messages:
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-
-                try:
-                    await message.channel.send(
-                        f"{EMOJIS['no']} {message.author.mention} link göndermek yasak.",
-                        delete_after=4
-                    )
-                except Exception:
-                    pass
-
-    # -------------------------
-    # KÖTÜ KELİME
-    # -------------------------
-
-    bad_words = moderation.get("bad_words", [])
-
-    if bad_words:
-        lowered = message.content.lower()
-
-        if any(word in lowered for word in bad_words):
-            if not message.author.guild_permissions.manage_messages:
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-
-    # -------------------------
-    # ANTI-SPAM
-    # -------------------------
-
-    if moderation.get("anti_spam"):
-        key = (message.guild.id, message.author.id)
-
-        now = time.time()
-
-        SPAM_CACHE.setdefault(key, [])
-
-        SPAM_CACHE[key] = [
-            timestamp
-            for timestamp in SPAM_CACHE[key]
-            if now - timestamp <= 6
-        ]
-
-        SPAM_CACHE[key].append(now)
-
-        if len(SPAM_CACHE[key]) >= 5:
-            SPAM_CACHE[key].clear()
-
-            try:
-                await message.author.timeout(
-                    discord.utils.utcnow() + timedelta(seconds=30),
-                    reason="Anti-spam"
-                )
-
-                await message.channel.send(
-                    f"{EMOJIS['no']} {message.author.mention} spam nedeniyle "
-                    f"30 saniye timeout aldı.",
-                    delete_after=5
-                )
-
-            except Exception:
-                pass
-
-    await bot.process_commands(message)
-
-
-# =========================================================
-# WELCOME / AUTOROLE
-# =========================================================
-
-@bot.event
-async def on_member_join(member):
-    cfg = get_guild_config(member.guild.id)
-
-    welcome = cfg["welcome"]
-
-    channel = (
-        member.guild.get_channel(welcome.get("channel_id"))
-        if welcome.get("channel_id")
-        else None
-    )
-
-    if channel:
-        title = welcome.get("title", "Sunucumuza Hoş Geldin!")
-        description = welcome.get(
-            "description",
-            "{member} sunucumuza katıldı."
-        )
-
-        description = description.replace(
-            "{member}",
-            member.mention
-        ).replace(
-            "{server}",
-            member.guild.name
-        )
-
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.from_rgb(0, 0, 0)
-        )
-
-        if welcome.get("image"):
-            embed.set_image(url=welcome["image"])
-
-        try:
-            await channel.send(embed=embed)
-        except Exception:
-            pass
-
-    role_id = cfg["autorole"].get("role_id")
-
-    if role_id:
-        role = member.guild.get_role(role_id)
-
-        if role:
-            try:
-                await member.add_roles(
-                    role,
-                    reason="Dynex Autorole"
-                )
-            except Exception:
-                pass
-
-    dm_message = welcome.get("dm_message")
-
-    if dm_message:
-        try:
-            await member.send(
-                dm_message.replace(
-                    "{member}",
-                    member.mention
-                ).replace(
-                    "{server}",
-                    member.guild.name
-                )
-            )
-        except Exception:
-            pass
-
-    await send_log(
-        member.guild,
-        "Üye Katıldı",
-        f"{member.mention} sunucuya katıldı.",
-        "join"
-    )
-
-
-@bot.event
-async def on_member_remove(member):
-    await send_log(
-        member.guild,
-        "Üye Ayrıldı",
-        f"{member.mention} sunucudan ayrıldı.",
-        "leave"
-    )
-
-
-# =========================================================
-# MESAJ LOGLARI
-# =========================================================
-
-@bot.event
-async def on_message_delete(message):
-    if not message.guild or message.author.bot:
+    if message.author.bot:
         return
-
-    cfg = get_guild_config(message.guild.id)
-
-    if not cfg["logs"].get("delete"):
-        return
-
-    content = message.content or "Mesaj içeriği yok."
-
-    if len(content) > 1500:
-        content = content[:1500] + "..."
 
     await send_log(
         message.guild,
-        "Mesaj Silindi",
-        f"**Kullanıcı:** {message.author.mention}\n"
-        f"**Kanal:** {message.channel.mention}\n"
-        f"**Mesaj:** {content}",
-        "delete"
+        "delete",
+        "Mesaj silindi",
+        (
+            f"{message.author.mention}\n"
+            f"{message.content[:1000]}"
+        )
     )
 
 
+# =========================================================
+# MESAJ DÜZENLENDİ
+# =========================================================
+
 @bot.event
-async def on_message_edit(before, after):
-    if not before.guild or before.author.bot:
+async def on_message_edit(
+    before,
+    after
+):
+
+    if not before.guild:
+        return
+
+    if before.author.bot:
         return
 
     if before.content == after.content:
@@ -3324,125 +2476,79 @@ async def on_message_edit(before, after):
 
     await send_log(
         before.guild,
-        "Mesaj Düzenlendi",
-        f"**Kullanıcı:** {before.author.mention}\n"
-        f"**Kanal:** {before.channel.mention}\n"
-        f"**Eski:** {before.content[:1000]}\n"
-        f"**Yeni:** {after.content[:1000]}",
-        "edit"
-    )
-
-
-@bot.event
-async def on_member_ban(guild, user):
-    await send_log(
-        guild,
-        "Üye Banlandı",
-        f"{user.mention if hasattr(user, 'mention') else user} banlandı.",
-        "ban"
+        "edit",
+        "Mesaj düzenlendi",
+        (
+            f"{before.author.mention}\n\n"
+            f"Önce:\n{before.content[:500]}\n\n"
+            f"Sonra:\n{after.content[:500]}"
+        )
     )
 
 
 # =========================================================
-# VOICE
+# SES
 # =========================================================
 
 @bot.event
-async def on_voice_state_update(member, before, after):
-    if member.bot:
+async def on_voice_state_update(
+    member,
+    before,
+    after
+):
+
+    if before.channel == after.channel:
         return
 
-    cfg = get_guild_config(member.guild.id)
-    voice = cfg["voice"]
+    config = get_guild_config(
+        member.guild.id
+    )
 
-    channel_id = voice.get("channel_id")
+    voice_config = config["voice"]
+
+    channel_id = voice_config.get(
+        "channel_id"
+    )
 
     if not channel_id:
         return
 
-    channel = member.guild.get_channel(channel_id)
+    channel = member.guild.get_channel(
+        channel_id
+    )
 
     if not channel:
         return
 
-    if before.channel is None and after.channel is not None:
-        message = voice.get(
-            "join_message",
-            "{member} ses kanalına katıldı."
-        )
+    if after.channel:
 
-        message = message.replace(
-            "{member}",
-            member.mention
-        ).replace(
-            "{channel}",
-            after.channel.name
-        )
+        message = voice_config[
+            "join_message"
+        ]
 
-        try:
-            await channel.send(message)
-        except Exception:
-            pass
-
-    elif before.channel is not None and after.channel is None:
-        message = voice.get(
-            "leave_message",
-            "{member} ses kanalından ayrıldı."
-        )
-
-        message = message.replace(
-            "{member}",
-            member.mention
-        ).replace(
-            "{channel}",
-            before.channel.name
-        )
-
-        try:
-            await channel.send(message)
-        except Exception:
-            pass
-
-
-# =========================================================
-# HATA YÖNETİMİ
-# =========================================================
-
-@tree.error
-async def on_app_command_error(
-    interaction: discord.Interaction,
-    error
-):
-    original = error
-
-    if isinstance(error, app_commands.CommandInvokeError):
-        original = error.original
-
-    if isinstance(original, app_commands.MissingPermissions):
-        message = f"{EMOJIS['no']} Bu komut için gerekli yetkiye sahip değilsiniz."
-
-    elif isinstance(original, discord.Forbidden):
-        message = f"{EMOJIS['no']} Botun bu işlemi yapmaya yetkisi yok."
-
-    elif isinstance(original, app_commands.TransformerError):
-        message = f"{EMOJIS['no']} Girilen değer geçersiz."
+        voice_channel = after.channel
 
     else:
-        print("Slash komut hatası:", repr(original))
-        message = f"{EMOJIS['no']} Komut çalıştırılırken bir hata oluştu."
+
+        message = voice_config[
+            "leave_message"
+        ]
+
+        voice_channel = before.channel
+
+    message = message.format(
+        member=member.mention,
+        channel=voice_channel.mention
+        if voice_channel else ""
+    )
 
     try:
-        if interaction.response.is_done():
-            await interaction.followup.send(
-                message,
-                ephemeral=True
-            )
-        else:
-            await interaction.response.send_message(
-                message,
-                ephemeral=True
-            )
-    except Exception:
+
+        await channel.send(
+            message
+        )
+
+    except discord.HTTPException:
         pass
 
 
@@ -3452,30 +2558,72 @@ async def on_app_command_error(
 
 @bot.event
 async def on_ready():
-    global TICKET_VIEW_REGISTERED
 
-    if not TICKET_VIEW_REGISTERED:
-        bot.add_view(TicketCloseView())
-        TICKET_VIEW_REGISTERED = True
+    global SYNC_DONE
 
-    try:
-        synced = await tree.sync()
+    if not SYNC_DONE:
 
-        print(
-            f"Dynex giriş yaptı: {bot.user} | "
-            f"{len(bot.guilds)} sunucu | "
-            f"{len(synced)} slash komut"
+        try:
+
+            await bot.tree.sync()
+
+            SYNC_DONE = True
+
+            print(
+                f"Slash komutları senkronlandı."
+            )
+
+        except Exception as error:
+
+            print(
+                f"Slash sync hatası: {error}"
+            )
+
+    print(
+        f"BOT AKTİF: {bot.user}"
+    )
+
+    print(
+        f"GERÇEK SUNUCU SAYISI: {len(bot.guilds)}"
+    )
+
+
+# =========================================================
+# PERSISTENT VIEWS
+# =========================================================
+
+async def setup_persistent_views():
+
+    bot.add_view(
+        TicketCloseView()
+    )
+
+    bot.add_view(
+        TicketOpenView()
+    )
+
+
+# =========================================================
+# STARTUP
+# =========================================================
+
+async def main():
+
+    if not TOKEN:
+
+        raise RuntimeError(
+            "DISCORD_TOKEN ortam değişkeni bulunamadı."
         )
 
-    except Exception as e:
-        print("Slash sync hatası:", repr(e))
+    await setup_persistent_views()
+
+    await bot.start(
+        TOKEN
+    )
 
 
-# =========================================================
-# BAŞLAT
-# =========================================================
+if __name__ == "__main__":
 
-if not TOKEN:
-    print("HATA: DISCORD_TOKEN environment variable bulunamadı.")
-else:
-    bot.run(TOKEN)
+    asyncio.run(
+        main()
+    )
