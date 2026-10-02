@@ -390,7 +390,7 @@ class LanguageSelect(discord.ui.Select):
 
     def __init__(self):
 
-        options = [
+        options = []
             discord.SelectOption(
                 label="Türkçe",
                 value="tr"
