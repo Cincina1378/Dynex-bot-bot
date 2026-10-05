@@ -1,15 +1,10 @@
 import os
-import json
-import random
 import time
+import random
 import asyncio
-from pathlib import Path
-from datetime import datetime, timezone, timedelta
-
 import discord
 from discord import app_commands
 from discord.ext import commands
-
 
 # =========================================================
 # AYARLAR
@@ -19,123 +14,53 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 PREFIX = "D."
 SUPPORT_SERVER_ID = 1551647711332139098
-SUPPORT_INVITE = "https://discord.gg/2pFJwJNDR"
-
-CONFIG_FILE = Path("config.json")
-
-START_TIME = time.time()
-
-LANGUAGES = {
-    "tr": "Türkçe",
-    "en": "English",
-    "az": "Azərbaycan dili"
-}
-
-
-# =========================================================
-# CONFIG
-# =========================================================
-
-def load_config():
-    if not CONFIG_FILE.exists():
-        return {}
-
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-config = load_config()
-
-
-def save_config():
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
-
-
-def guild_config(guild_id):
-    gid = str(guild_id)
-
-    if gid not in config:
-        config[gid] = {
-            "language": "tr",
-            "giveaway_role": None,
-            "dm_role": None,
-            "log_channel": None,
-            "counting_channel": None,
-            "counting_number": 0,
-            "word_channel": None,
-            "word_last": None
-        }
-        save_config()
-
-    return config[gid]
-
-
-# =========================================================
-# BOT
-# =========================================================
+OWNER_ID = 1540359436244095137
 
 intents = discord.Intents.default()
-intents.guilds = True
-intents.members = True
-intents.messages = True
 intents.message_content = True
-intents.presences = True
+intents.members = True
+intents.guilds = True
 
+bot = commands.Bot(
+    command_prefix=PREFIX,
+    intents=intents,
+    help_command=None
+)
 
-class DynexBot(commands.Bot):
+start_time = time.time()
 
-    def __init__(self):
-        super().__init__(
-            command_prefix=PREFIX,
-            intents=intents,
-            help_command=None
-        )
-        self.synced = False
+# Sunucu başına ayarlar
+guild_settings = {}
 
-    async def setup_hook(self):
-        try:
-            synced = await self.tree.sync()
-            print(f"{len(synced)} slash komutu senkronize edildi.")
-        except Exception as e:
-            print("Slash senkronizasyon hatası:", repr(e))
-
-    async def on_ready(self):
-        print(f"Dynex giriş yaptı: {self.user} ({self.user.id})")
-        print(f"Sunucu sayısı: {len(self.guilds)}")
-
-
-bot = DynexBot()
-
+# Kullanıcı başına dil
+user_languages = {}
 
 # =========================================================
 # YARDIMCI FONKSİYONLAR
 # =========================================================
 
+def get_guild_settings(guild_id):
+    if guild_id not in guild_settings:
+        guild_settings[guild_id] = {
+            "language": "tr",
+            "giveaway_role": None,
+            "dm_role": None,
+            "welcome_channel": None,
+            "log_channel": None,
+            "ticket_category": None,
+            "autorole": None,
+            "mod_log": None,
+            "game_channel": None
+        }
+    return guild_settings[guild_id]
+
+
 def is_admin(interaction: discord.Interaction):
-    return (
-        interaction.guild is not None
-        and isinstance(interaction.user, discord.Member)
-        and interaction.user.guild_permissions.administrator
-    )
+    return interaction.user.guild_permissions.administrator
 
 
-def admin_only():
-    async def predicate(interaction: discord.Interaction):
-        if not is_admin(interaction):
-            raise app_commands.CheckFailure(
-                "Bu komutu kullanmak için Yönetici yetkisine sahip olmalısın."
-            )
-        return True
-
-    return app_commands.check(predicate)
-
-
-def uptime_text():
-    seconds = int(time.time() - START_TIME)
+def format_uptime():
+    seconds = int(time.time() - start_time)
 
     days, seconds = divmod(seconds, 86400)
     hours, seconds = divmod(seconds, 3600)
@@ -149,51 +74,49 @@ def uptime_text():
         parts.append(f"{hours} saat")
     if minutes:
         parts.append(f"{minutes} dakika")
-
-    parts.append(f"{seconds} saniye")
+    if seconds or not parts:
+        parts.append(f"{seconds} saniye")
 
     return ", ".join(parts)
 
 
-def get_language(guild):
-    if guild is None:
-        return "tr"
+async def get_support_member_count():
+    guild = bot.get_guild(SUPPORT_SERVER_ID)
 
-    return guild_config(guild.id).get("language", "tr")
+    if guild is not None:
+        return guild.member_count
 
-
-async def get_bot_owner():
     try:
-        info = await bot.application_info()
-        return info.owner
+        guild = await bot.fetch_guild(SUPPORT_SERVER_ID)
+        return guild.member_count or 0
     except Exception:
-        return None
+        return 0
 
 
-async def send_log(guild, title, description):
-    if guild is None:
-        return
+def bot_color():
+    return discord.Color.blue()
 
-    data = guild_config(guild.id)
-    channel_id = data.get("log_channel")
 
-    if not channel_id:
-        return
+# =========================================================
+# BOT READY
+# =========================================================
 
-    channel = guild.get_channel(channel_id)
+@bot.event
+async def on_ready():
+    try:
+        synced = await bot.tree.sync()
+        print(f"{len(synced)} slash komutu senkronize edildi.")
+    except Exception as e:
+        print("Slash senkronizasyon hatası:", repr(e))
 
-    if not channel:
-        return
-
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=discord.Color.blurple(),
-        timestamp=datetime.now(timezone.utc)
-    )
+    print(f"Dynex giriş yaptı: {bot.user}")
+    print(f"Sunucu sayısı: {len(bot.guilds)}")
 
     try:
-        await channel.send(embed=embed)
+        await bot.change_presence(
+            status=discord.Status.online,
+            activity=discord.Game(name=f"{PREFIX}yardım")
+        )
     except Exception:
         pass
 
@@ -204,74 +127,83 @@ async def send_log(guild, title, description):
 
 @bot.tree.command(
     name="bot",
-    description="Dynex botunun mevcut durumunu gösterir."
+    description="Dynex'in mevcut durumunu gösterir."
 )
 async def bot_info(interaction: discord.Interaction):
 
+    await interaction.response.defer()
+
     try:
-        support = bot.get_guild(SUPPORT_SERVER_ID)
+        guild_count = len(bot.guilds)
 
-        if support:
-            support_members = support.member_count or len(support.members)
+        support_count = await get_support_member_count()
+
+        latency = round(bot.latency * 1000)
+
+        if latency < 100:
+            ping_text = "Mükemmel"
+        elif latency < 200:
+            ping_text = "İyi"
+        elif latency < 350:
+            ping_text = "Orta"
+        elif latency < 500:
+            ping_text = "Zayıf"
         else:
-            support_members = 0
-
-        owner = await get_bot_owner()
-
-        if owner:
-            owner_text = owner.mention
-        else:
-            owner_text = "Bot sahibi alınamadı"
+            ping_text = "Berbat"
 
         embed = discord.Embed(
             title="Dynex Durum",
-            color=discord.Color.black()
+            color=discord.Color.blue()
         )
 
         embed.add_field(
-            name="Sunucu sayısı:",
-            value=f"`{len(bot.guilds)}`",
+            name="Sunucu sayısı",
+            value=f"`{guild_count}`",
             inline=False
         )
 
         embed.add_field(
-            name="Destek sunucusu üye sayısı:",
-            value=f"`{support_members}`",
+            name="Destek sunucusu üye sayısı",
+            value=f"`{support_count}`",
             inline=False
         )
 
         embed.add_field(
-            name="Prefix yani . Komut:",
+            name="Prefix yani . Komut",
             value=f"`{PREFIX}`",
             inline=False
         )
 
         embed.add_field(
-            name="Aktif kalma süresi:",
-            value=f"`{uptime_text()}`",
+            name="Aktif kalma süresi",
+            value=f"`{format_uptime()}`",
             inline=False
         )
 
         embed.add_field(
-            name="Bot sahibi:",
-            value=owner_text,
+            name="Gecikme",
+            value=f"`{latency}ms` • {ping_text}",
             inline=False
         )
 
         embed.add_field(
-            name="Destek sunucusu:",
-            value=f"[Destek sunucusuna katıl]({SUPPORT_INVITE})",
+            name="Bot sahibi",
+            value=f"<@{OWNER_ID}>",
             inline=False
         )
 
         embed.set_footer(text="Dynex")
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     except Exception as e:
         print("/bot hatası:", repr(e))
 
-        if not interaction.response.is_done():
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                "Bot bilgileri alınırken bir hata oluştu."
+            )
+        else:
             await interaction.response.send_message(
                 "Bot bilgileri alınırken bir hata oluştu.",
                 ephemeral=True
@@ -279,302 +211,87 @@ async def bot_info(interaction: discord.Interaction):
 
 
 # =========================================================
-# /PING
-# =========================================================
-
-@bot.tree.command(
-    name="ping",
-    description="Botun gecikmesini gösterir."
-)
-async def ping(interaction: discord.Interaction):
-
-    latency = round(bot.latency * 1000)
-
-    if latency < 100:
-        durum = "Mükemmel"
-    elif latency < 180:
-        durum = "İyi"
-    elif latency < 300:
-        durum = "Orta"
-    elif latency < 500:
-        durum = "Zayıf"
-    else:
-        durum = "Berbat"
-
-    embed = discord.Embed(
-        title="Dynex Ping",
-        description=f"**Gecikme:** `{latency}ms`\n**Durum:** `{durum}`",
-        color=discord.Color.blue()
-    )
-
-    await interaction.response.send_message(embed=embed)
-
-
-# =========================================================
-# /YARDIM
-# =========================================================
-
-@bot.tree.command(
-    name="yardim",
-    description="Dynex komutlarını gösterir."
-)
-async def help_command(interaction: discord.Interaction):
-
-    embed = discord.Embed(
-        title="Dynex Yardım",
-        description="Kullanabileceğin komutlardan bazıları:",
-        color=discord.Color.blurple()
-    )
-
-    embed.add_field(
-        name="Genel",
-        value=(
-            "`/bot`\n"
-            "`/ping`\n"
-            "`/sunucu`\n"
-            "`/kullanici`\n"
-            "`/avatar`\n"
-            "`/roller`"
-        ),
-        inline=True
-    )
-
-    embed.add_field(
-        name="Eğlence",
-        value=(
-            "`/zar`\n"
-            "`/yazitura`\n"
-            "`/sans`\n"
-            "`/sekiztop`\n"
-            "`/sayi-tahmin`\n"
-            "`/kelime`"
-        ),
-        inline=True
-    )
-
-    embed.add_field(
-        name="Yönetim",
-        value=(
-            "`/ayarlar`\n"
-            "`/dil`\n"
-            "`/dm`\n"
-            "`/temizle`\n"
-            "`/timeout`\n"
-            "`/kick`\n"
-            "`/ban`"
-        ),
-        inline=True
-    )
-
-    embed.set_footer(text="Dynex")
-
-    await interaction.response.send_message(embed=embed)
-
-
-# =========================================================
-# GENEL KOMUTLAR
-# =========================================================
-
-@bot.tree.command(
-    name="sunucu",
-    description="Sunucu bilgilerini gösterir."
-)
-async def server_info(interaction: discord.Interaction):
-
-    guild = interaction.guild
-
-    if guild is None:
-        return await interaction.response.send_message(
-            "Bu komut sunucuda kullanılabilir.",
-            ephemeral=True
-        )
-
-    embed = discord.Embed(
-        title=guild.name,
-        color=discord.Color.blurple()
-    )
-
-    embed.add_field(
-        name="Üye sayısı",
-        value=str(guild.member_count),
-        inline=True
-    )
-
-    embed.add_field(
-        name="Kanal sayısı",
-        value=str(len(guild.channels)),
-        inline=True
-    )
-
-    embed.add_field(
-        name="Rol sayısı",
-        value=str(len(guild.roles)),
-        inline=True
-    )
-
-    embed.add_field(
-        name="Sunucu sahibi",
-        value=f"<@{guild.owner_id}>",
-        inline=True
-    )
-
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(
-    name="kullanici",
-    description="Kullanıcı bilgilerini gösterir."
-)
-@app_commands.describe(kullanici="Bilgilerini görmek istediğin kullanıcı")
-async def user_info(
-    interaction: discord.Interaction,
-    kullanici: discord.Member = None
-):
-
-    user = kullanici or interaction.user
-
-    embed = discord.Embed(
-        title="Kullanıcı Bilgileri",
-        color=discord.Color.blurple()
-    )
-
-    embed.set_thumbnail(url=user.display_avatar.url)
-
-    embed.add_field(
-        name="Kullanıcı",
-        value=user.mention,
-        inline=False
-    )
-
-    embed.add_field(
-        name="ID",
-        value=str(user.id),
-        inline=True
-    )
-
-    embed.add_field(
-        name="Hesap",
-        value=f"<t:{int(user.created_at.timestamp())}:R>",
-        inline=True
-    )
-
-    if isinstance(user, discord.Member):
-        embed.add_field(
-            name="Sunucuya katılma",
-            value=f"<t:{int(user.joined_at.timestamp())}:R>"
-            if user.joined_at else "Bilinmiyor",
-            inline=False
-        )
-
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(
-    name="avatar",
-    description="Kullanıcının avatarını gösterir."
-)
-@app_commands.describe(kullanici="Avatarını görmek istediğin kullanıcı")
-async def avatar(
-    interaction: discord.Interaction,
-    kullanici: discord.User = None
-):
-
-    user = kullanici or interaction.user
-
-    embed = discord.Embed(
-        title=f"{user.display_name} Avatarı",
-        color=discord.Color.blurple()
-    )
-
-    embed.set_image(url=user.display_avatar.url)
-
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(
-    name="roller",
-    description="Sunucudaki rolleri gösterir."
-)
-async def roles(interaction: discord.Interaction):
-
-    roles_list = [
-        role.mention
-        for role in reversed(interaction.guild.roles)
-        if role.name != "@everyone"
-    ]
-
-    text = " ".join(roles_list)
-
-    if len(text) > 4000:
-        text = text[:3900] + "..."
-
-    embed = discord.Embed(
-        title="Sunucu Rolleri",
-        description=text or "Rol bulunamadı.",
-        color=discord.Color.blurple()
-    )
-
-    await interaction.response.send_message(embed=embed)
-
-
-# =========================================================
-# DİL
+# /DİL
+# SADECE KULLANAN KİŞİYİ DEĞİŞTİRİR
 # =========================================================
 
 @bot.tree.command(
     name="dil",
-    description="Sunucunun Dynex dilini değiştirir."
+    description="Kendi Dynex dilini değiştir."
 )
 @app_commands.describe(
-    dil="Sunucuda kullanılacak dil"
+    dil="Türkçe, İngilizce veya Azerice"
 )
 @app_commands.choices(
     dil=[
         app_commands.Choice(name="Türkçe", value="tr"),
         app_commands.Choice(name="English", value="en"),
-        app_commands.Choice(name="Azərbaycan dili", value="az")
+        app_commands.Choice(name="Azərbaycan", value="az")
     ]
 )
-@admin_only()
-async def language(
+async def dil(
     interaction: discord.Interaction,
     dil: app_commands.Choice[str]
 ):
 
-    data = guild_config(interaction.guild.id)
+    user_languages[interaction.user.id] = dil.value
 
-    data["language"] = dil.value
-
-    save_config()
+    names = {
+        "tr": "Türkçe",
+        "en": "English",
+        "az": "Azərbaycan"
+    }
 
     await interaction.response.send_message(
-        f"Sunucu dili **{dil.name}** olarak ayarlandı.",
+        f"Diliniz **{names[dil.value]}** olarak değiştirildi.",
         ephemeral=True
     )
 
 
 # =========================================================
-# AYARLAR
+# AYARLAR VIEW
 # =========================================================
 
-class SettingsSelect(discord.ui.Select):
+class SettingsView(discord.ui.View):
 
-    def __init__(self):
-        options = [
-            discord.SelectOption(
-                label="Sunucu Dili",
-                value="language",
-                emoji="🌐"
-            ),
+    def __init__(self, owner_id):
+        super().__init__(timeout=180)
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction):
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Bu ayarlar menüsü sana ait değil.",
+                ephemeral=True
+            )
+            return False
+
+        if not is_admin(interaction):
+            await interaction.response.send_message(
+                "Bu menüyü kullanmak için sunucuda Yönetici yetkisine sahip olmalısın.",
+                ephemeral=True
+            )
+            return False
+
+        return True
+
+    @discord.ui.select(
+        placeholder="Bir ayar seç...",
+        options=[
             discord.SelectOption(
                 label="Çekiliş Rolü",
                 value="giveaway_role",
-                emoji="🎁"
+                emoji="🎉"
             ),
             discord.SelectOption(
-                label="DM Gönderme Rolü",
+                label="DM Duyuru Rolü",
                 value="dm_role",
-                emoji="📨"
+                emoji="📢"
+            ),
+            discord.SelectOption(
+                label="Hoş Geldin Kanalı",
+                value="welcome_channel",
+                emoji="👋"
             ),
             discord.SelectOption(
                 label="Log Kanalı",
@@ -582,956 +299,692 @@ class SettingsSelect(discord.ui.Select):
                 emoji="📋"
             ),
             discord.SelectOption(
-                label="Sayı Sayma Kanalı",
-                value="counting_channel",
-                emoji="🔢"
+                label="Ticket Kategorisi",
+                value="ticket_category",
+                emoji="🎫"
             ),
             discord.SelectOption(
-                label="Kelime Oyunu Kanalı",
-                value="word_channel",
-                emoji="🔤"
+                label="Otorol",
+                value="autorole",
+                emoji="🪪"
+            ),
+            discord.SelectOption(
+                label="Moderasyon Log",
+                value="mod_log",
+                emoji="🛡️"
+            ),
+            discord.SelectOption(
+                label="Oyun Kanalı",
+                value="game_channel",
+                emoji="🎮"
             )
         ]
+    )
+    async def settings_select(
+        self,
+        interaction: discord.Interaction,
+        select: discord.ui.Select
+    ):
 
-        super().__init__(
-            placeholder="Ayarlamak istediğin seçeneği seç...",
-            options=options,
-            min_values=1,
-            max_values=1
+        setting = select.values[0]
+
+        names = {
+            "giveaway_role": "Çekiliş Rolü",
+            "dm_role": "DM Duyuru Rolü",
+            "welcome_channel": "Hoş Geldin Kanalı",
+            "log_channel": "Log Kanalı",
+            "ticket_category": "Ticket Kategorisi",
+            "autorole": "Otorol",
+            "mod_log": "Moderasyon Log",
+            "game_channel": "Oyun Kanalı"
+        }
+
+        await interaction.response.send_message(
+            f"**{names[setting]}** ayarını yapmak için aşağıdaki menüyü kullan.",
+            view=SettingInputView(
+                interaction.user.id,
+                setting
+            ),
+            ephemeral=True
         )
 
-    async def callback(self, interaction: discord.Interaction):
 
-        if not is_admin(interaction):
-            return await interaction.response.send_message(
-                "Bu menüyü kullanmak için Yönetici yetkisine sahip olmalısın.",
-                ephemeral=True
-            )
+class SettingInputView(discord.ui.View):
 
-        value = self.values[0]
+    def __init__(self, owner_id, setting):
+        super().__init__(timeout=180)
+        self.owner_id = owner_id
+        self.setting = setting
 
-        if value == "language":
+    async def interaction_check(self, interaction):
+
+        if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
-                "Dil seçimini aşağıdan yap:",
-                view=LanguageView(),
+                "Bu menüyü sen açmadın.",
                 ephemeral=True
             )
-
-        elif value == "giveaway_role":
-            await interaction.response.send_modal(
-                RoleIDModal(
-                    "Çekiliş Rolü",
-                    "giveaway_role"
-                )
-            )
-
-        elif value == "dm_role":
-            await interaction.response.send_modal(
-                RoleIDModal(
-                    "DM Gönderme Rolü",
-                    "dm_role"
-                )
-            )
-
-        elif value == "log_channel":
-            await interaction.response.send_modal(
-                ChannelIDModal(
-                    "Log Kanalı",
-                    "log_channel"
-                )
-            )
-
-        elif value == "counting_channel":
-            await interaction.response.send_modal(
-                ChannelIDModal(
-                    "Sayı Sayma Kanalı",
-                    "counting_channel"
-                )
-            )
-
-        elif value == "word_channel":
-            await interaction.response.send_modal(
-                ChannelIDModal(
-                    "Kelime Oyunu Kanalı",
-                    "word_channel"
-                )
-            )
-
-
-class SettingsView(discord.ui.View):
-
-    def __init__(self):
-        super().__init__(timeout=300)
-        self.add_item(SettingsSelect())
-
-
-class LanguageSelect(discord.ui.Select):
-
-    def __init__(self):
-        options = [
-            discord.SelectOption(
-                label="Türkçe",
-                value="tr",
-                emoji="🇹🇷"
-            ),
-            discord.SelectOption(
-                label="English",
-                value="en",
-                emoji="🇬🇧"
-            ),
-            discord.SelectOption(
-                label="Azərbaycan dili",
-                value="az",
-                emoji="🇦🇿"
-            )
-        ]
-
-        super().__init__(
-            placeholder="Dil seç...",
-            options=options
-        )
-
-    async def callback(self, interaction: discord.Interaction):
+            return False
 
         if not is_admin(interaction):
-            return await interaction.response.send_message(
-                "Yönetici yetkisi gerekiyor.",
+            await interaction.response.send_message(
+                "Bu ayarı değiştirmek için Yönetici yetkisi gerekiyor.",
                 ephemeral=True
             )
+            return False
 
-        data = guild_config(interaction.guild.id)
+        return True
 
-        data["language"] = self.values[0]
+    @discord.ui.button(
+        label="ID Gir",
+        style=discord.ButtonStyle.primary
+    )
+    async def id_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
 
-        save_config()
-
-        await interaction.response.edit_message(
-            content=f"Dil **{LANGUAGES[self.values[0]]}** olarak değiştirildi.",
-            view=None
+        await interaction.response.send_modal(
+            SettingModal(
+                self.owner_id,
+                self.setting
+            )
         )
 
+    @discord.ui.button(
+        label="Mevcut Ayarı Gör",
+        style=discord.ButtonStyle.secondary
+    )
+    async def show_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
 
-class LanguageView(discord.ui.View):
+        settings = get_guild_settings(interaction.guild.id)
 
-    def __init__(self):
-        super().__init__(timeout=120)
-        self.add_item(LanguageSelect())
+        value = settings.get(self.setting)
 
-
-class RoleIDModal(discord.ui.Modal):
-
-    def __init__(self, title, setting):
-        super().__init__(title=title)
-
-        self.setting = setting
-
-        self.role_id = discord.ui.TextInput(
-            label="Rol ID",
-            placeholder="Örn: 123456789012345678",
-            required=True,
-            max_length=25
-        )
-
-        self.add_item(self.role_id)
-
-    async def on_submit(self, interaction: discord.Interaction):
-
-        try:
-            role_id = int(self.role_id.value.strip())
-        except ValueError:
-            return await interaction.response.send_message(
-                "Geçerli bir rol ID'si gir.",
-                ephemeral=True
-            )
-
-        role = interaction.guild.get_role(role_id)
-
-        if role is None:
-            return await interaction.response.send_message(
-                "Bu sunucuda böyle bir rol bulunamadı.",
-                ephemeral=True
-            )
-
-        data = guild_config(interaction.guild.id)
-        data[self.setting] = role.id
-
-        save_config()
+        if value is None:
+            text = "Ayarlanmadı."
+        else:
+            text = f"`{value}`"
 
         await interaction.response.send_message(
-            f"{role.mention} başarıyla ayarlandı.",
+            f"Mevcut ayar: {text}",
             ephemeral=True
         )
 
 
-class ChannelIDModal(discord.ui.Modal):
+class SettingModal(discord.ui.Modal):
 
-    def __init__(self, title, setting):
-        super().__init__(title=title)
-
+    def __init__(self, owner_id, setting):
+        super().__init__(title="Ayar Değiştir")
+        self.owner_id = owner_id
         self.setting = setting
 
-        self.channel_id = discord.ui.TextInput(
-            label="Kanal ID",
-            placeholder="Örn: 123456789012345678",
+        self.value_input = discord.ui.TextInput(
+            label="ID",
+            placeholder="Rol / kanal / kategori ID'si",
             required=True,
-            max_length=25
+            max_length=30
         )
 
-        self.add_item(self.channel_id)
+        self.add_item(self.value_input)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction):
 
-        try:
-            channel_id = int(self.channel_id.value.strip())
-        except ValueError:
-            return await interaction.response.send_message(
-                "Geçerli bir kanal ID'si gir.",
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Bu ayarı sen değiştiremezsin.",
                 ephemeral=True
             )
+            return
 
-        channel = interaction.guild.get_channel(channel_id)
-
-        if channel is None:
-            return await interaction.response.send_message(
-                "Bu sunucuda böyle bir kanal bulunamadı.",
+        if not is_admin(interaction):
+            await interaction.response.send_message(
+                "Bu ayarı değiştirmek için Yönetici yetkisi gerekiyor.",
                 ephemeral=True
             )
+            return
 
-        data = guild_config(interaction.guild.id)
-        data[self.setting] = channel.id
+        value = self.value_input.value.strip()
 
-        save_config()
+        if not value.isdigit():
+            await interaction.response.send_message(
+                "Geçerli bir Discord ID gir.",
+                ephemeral=True
+            )
+            return
+
+        settings = get_guild_settings(interaction.guild.id)
+
+        settings[self.setting] = int(value)
 
         await interaction.response.send_message(
-            f"{channel.mention} başarıyla ayarlandı.",
+            "Ayar başarıyla kaydedildi.",
             ephemeral=True
         )
 
+
+# =========================================================
+# /AYARLAR
+# =========================================================
 
 @bot.tree.command(
     name="ayarlar",
-    description="Dynex sunucu ayarlarını açar."
+    description="Sunucu ayarlarını yönet."
 )
-@admin_only()
-async def settings(interaction: discord.Interaction):
+async def ayarlar(interaction: discord.Interaction):
 
-    data = guild_config(interaction.guild.id)
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "Bu komut sadece sunucularda kullanılabilir.",
+            ephemeral=True
+        )
+        return
 
-    language = LANGUAGES.get(
-        data.get("language", "tr"),
-        "Türkçe"
-    )
-
-    giveaway = (
-        f"<@&{data['giveaway_role']}>"
-        if data.get("giveaway_role")
-        else "Ayarlanmadı"
-    )
-
-    dm_role = (
-        f"<@&{data['dm_role']}>"
-        if data.get("dm_role")
-        else "Ayarlanmadı"
-    )
-
-    log_channel = (
-        f"<#{data['log_channel']}>"
-        if data.get("log_channel")
-        else "Ayarlanmadı"
-    )
+    if not is_admin(interaction):
+        await interaction.response.send_message(
+            "Bu komutu kullanmak için Yönetici yetkisine sahip olmalısın.",
+            ephemeral=True
+        )
+        return
 
     embed = discord.Embed(
         title="Dynex Ayarları",
-        description="Aşağıdaki menüden değiştirmek istediğin ayarı seç.",
-        color=discord.Color.blurple()
-    )
-
-    embed.add_field(
-        name="🌐 Dil",
-        value=language,
-        inline=False
-    )
-
-    embed.add_field(
-        name="🎁 Çekiliş Rolü",
-        value=giveaway,
-        inline=True
-    )
-
-    embed.add_field(
-        name="📨 DM Rolü",
-        value=dm_role,
-        inline=True
-    )
-
-    embed.add_field(
-        name="📋 Log Kanalı",
-        value=log_channel,
-        inline=True
+        description=(
+            "Aşağıdaki menüden ayarlamak istediğin sistemi seç.\n\n"
+            "• Çekiliş rolü\n"
+            "• DM duyuru rolü\n"
+            "• Hoş geldin kanalı\n"
+            "• Log kanalı\n"
+            "• Ticket kategorisi\n"
+            "• Otorol\n"
+            "• Moderasyon log\n"
+            "• Oyun kanalı"
+        ),
+        color=discord.Color.blue()
     )
 
     await interaction.response.send_message(
         embed=embed,
-        view=SettingsView(),
+        view=SettingsView(interaction.user.id),
         ephemeral=True
     )
 
 
 # =========================================================
-# DM DUYURU
+# /YARDIM
 # =========================================================
-
-class DmAnnouncementModal(discord.ui.Modal):
-
-    def __init__(self, role: discord.Role):
-        super().__init__(title="DM Duyurusu")
-
-        self.role = role
-
-        self.title_input = discord.ui.TextInput(
-            label="Başlık",
-            placeholder="Duyuru başlığı",
-            required=True,
-            max_length=256
-        )
-
-        self.message_input = discord.ui.TextInput(
-            label="Mesaj",
-            placeholder="Gönderilecek mesaj...",
-            style=discord.TextStyle.paragraph,
-            required=True,
-            max_length=4000
-        )
-
-        self.add_item(self.title_input)
-        self.add_item(self.message_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-
-        data = guild_config(interaction.guild.id)
-        allowed_role_id = data.get("dm_role")
-
-        if not allowed_role_id:
-            return await interaction.response.send_message(
-                "Önce `/ayarlar` üzerinden DM Gönderme Rolünü ayarla.",
-                ephemeral=True
-            )
-
-        if allowed_role_id not in [role.id for role in interaction.user.roles]:
-            return await interaction.response.send_message(
-                "Bu komutu kullanma yetkin yok.",
-                ephemeral=True
-            )
-
-        await interaction.response.defer(ephemeral=True)
-
-        embed = discord.Embed(
-            title=str(self.title_input.value),
-            description=str(self.message_input.value),
-            color=discord.Color.blue()
-        )
-
-        embed.set_footer(text="Dynex")
-
-        sent = 0
-        failed = 0
-
-        for member in self.role.members:
-
-            if member.bot:
-                continue
-
-            try:
-                await member.send(embed=embed)
-                sent += 1
-            except Exception:
-                failed += 1
-
-            await asyncio.sleep(0.15)
-
-        await interaction.followup.send(
-            f"Duyuru gönderildi.\n\n"
-            f"Başarılı: `{sent}`\n"
-            f"Başarısız: `{failed}`",
-            ephemeral=True
-        )
-
-        await send_log(
-            interaction.guild,
-            "DM Duyurusu",
-            f"{interaction.user.mention} tarafından "
-            f"{self.role.mention} rolüne DM gönderildi.\n"
-            f"Başarılı: {sent}\n"
-            f"Başarısız: {failed}"
-        )
-
 
 @bot.tree.command(
-    name="dm",
-    description="Belirlenen role DM duyurusu gönderir."
+    name="yardım",
+    description="Dynex komutlarını gösterir."
 )
-@app_commands.describe(rol="DM gönderilecek rol")
-async def dm_announcement(
-    interaction: discord.Interaction,
-    rol: discord.Role
-):
+async def yardım(interaction):
 
-    data = guild_config(interaction.guild.id)
-    allowed_role_id = data.get("dm_role")
+    embed = discord.Embed(
+        title="Dynex Yardım",
+        description=(
+            f"**Genel**\n"
+            f"`/bot` • Bot bilgileri\n"
+            f"`/dil` • Kendi dilini değiştir\n"
+            f"`/ayarlar` • Sunucu ayarları\n\n"
 
-    if not allowed_role_id:
-        return await interaction.response.send_message(
-            "DM gönderme rolü ayarlanmamış. `/ayarlar` komutundan ayarla.",
-            ephemeral=True
-        )
+            f"**Eğlence**\n"
+            f"`/sayı-oyunu` • Sayı tahmin oyunu\n"
+            f"`/kelime-oyunu` • Kelime oyunu\n"
+            f"`/yazitura` • Yazı tura\n"
+            f"`/zar` • Zar at\n"
+            f"`/rastgele` • Rastgele sayı\n"
+            f"`/8ball` • 8Ball\n\n"
 
-    if allowed_role_id not in [role.id for role in interaction.user.roles]:
-        return await interaction.response.send_message(
-            "Bu komutu kullanma yetkin yok.",
-            ephemeral=True
-        )
-
-    await interaction.response.send_modal(
-        DmAnnouncementModal(rol)
+            f"**Yönetim**\n"
+            f"`/dm` • Role DM duyurusu\n"
+            f"`/temizle` • Mesaj temizle"
+        ),
+        color=discord.Color.blue()
     )
+
+    await interaction.response.send_message(embed=embed)
 
 
 # =========================================================
-# EĞLENCE
+# /ZAR
 # =========================================================
 
 @bot.tree.command(
     name="zar",
-    description="Zar atar."
+    description="1-6 arasında zar at."
 )
-async def dice(interaction: discord.Interaction):
-
-    number = random.randint(1, 6)
+async def zar(interaction):
 
     await interaction.response.send_message(
-        f"🎲 Zar sonucu: **{number}**"
+        f"🎲 Zar: **{random.randint(1, 6)}**"
     )
 
+
+# =========================================================
+# /YAZITURA
+# =========================================================
 
 @bot.tree.command(
     name="yazitura",
-    description="Yazı veya tura atar."
+    description="Yazı veya tura at."
 )
-async def coin(interaction: discord.Interaction):
-
-    result = random.choice(["Yazı", "Tura"])
+async def yazitura(interaction):
 
     await interaction.response.send_message(
-        f"🪙 Sonuç: **{result}**"
+        f"🪙 **{random.choice(['Yazı', 'Tura'])}**!"
     )
 
 
-@bot.tree.command(
-    name="sans",
-    description="Şansını dene."
-)
-async def luck(interaction: discord.Interaction):
-
-    number = random.randint(1, 100)
-
-    await interaction.response.send_message(
-        f"🍀 Şansın: **%{number}**"
-    )
-
+# =========================================================
+# /RASTGELE
+# =========================================================
 
 @bot.tree.command(
-    name="sekiztop",
-    description="8 topa soru sor."
+    name="rastgele",
+    description="Belirlediğin aralıkta rastgele sayı seç."
 )
-@app_commands.describe(soru="Sorun")
-async def eight_ball(
-    interaction: discord.Interaction,
-    soru: str
+@app_commands.describe(
+    minimum="Minimum sayı",
+    maksimum="Maksimum sayı"
+)
+async def rastgele(
+    interaction,
+    minimum: int,
+    maksimum: int
 ):
+
+    if minimum > maksimum:
+        await interaction.response.send_message(
+            "Minimum sayı maksimumdan büyük olamaz.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message(
+        f"🎯 Rastgele sayı: **{random.randint(minimum, maksimum)}**"
+    )
+
+
+# =========================================================
+# /8BALL
+# =========================================================
+
+@bot.tree.command(
+    name="8ball",
+    description="Soruna rastgele cevap verir."
+)
+@app_commands.describe(
+    soru="Sorun"
+)
+async def eightball(interaction, soru: str):
 
     answers = [
         "Evet.",
         "Hayır.",
+        "Büyük ihtimalle.",
+        "Sanmıyorum.",
         "Kesinlikle.",
-        "Bence evet.",
-        "Bence hayır.",
+        "Belki.",
         "Bunu zaman gösterecek.",
-        "Şu an söylemek zor.",
-        "Kesinlikle mümkün."
+        "Şu an karar veremiyorum."
     ]
 
     await interaction.response.send_message(
-        f"🎱 **Soru:** {soru}\n"
-        f"**Cevap:** {random.choice(answers)}"
+        f"🎱 **{random.choice(answers)}**"
     )
 
 
-@bot.tree.command(
-    name="sayi-tahmin",
-    description="1 ile 100 arasında sayı tahmin et."
-)
-@app_commands.describe(tahmin="Tahminin")
-async def number_guess(
-    interaction: discord.Interaction,
-    tahmin: int
-):
-
-    if tahmin < 1 or tahmin > 100:
-        return await interaction.response.send_message(
-            "1 ile 100 arasında bir sayı yaz.",
-            ephemeral=True
-        )
-
-    number = random.randint(1, 100)
-
-    if tahmin == number:
-        text = f"🎉 Bildin! Sayı **{number}** idi."
-    elif tahmin < number:
-        text = f"❌ Bilemedin. Sayı **{number}** idi. Tahminin daha küçüktü."
-    else:
-        text = f"❌ Bilemedin. Sayı **{number}** idi. Tahminin daha büyüktü."
-
-    await interaction.response.send_message(text)
-
-
 # =========================================================
-# SAYI SAYMA
+# SAYI OYUNU
 # =========================================================
 
+number_games = {}
+
+
 @bot.tree.command(
-    name="sayac-ayarla",
-    description="Sayı sayma kanalını ayarlar."
+    name="sayı-oyunu",
+    description="Yönetici tarafından sayı tahmin oyunu başlatır."
 )
-@app_commands.describe(kanal="Sayı sayma kanalı")
-@admin_only()
-async def counting_setup(
-    interaction: discord.Interaction,
+@app_commands.describe(
+    kanal="Oyunun oynanacağı kanal"
+)
+async def sayi_oyunu(
+    interaction,
     kanal: discord.TextChannel
 ):
 
-    data = guild_config(interaction.guild.id)
+    if not is_admin(interaction):
+        await interaction.response.send_message(
+            "Bu oyunu sadece yöneticiler başlatabilir.",
+            ephemeral=True
+        )
+        return
 
-    data["counting_channel"] = kanal.id
-    data["counting_number"] = 0
+    number = random.randint(1, 100)
 
-    save_config()
+    number_games[kanal.id] = number
 
     await interaction.response.send_message(
-        f"🔢 Sayı sayma kanalı {kanal.mention} olarak ayarlandı.\n"
-        f"Başlangıç sayısı: `1`"
+        f"🎯 Sayı oyunu **{kanal.mention}** kanalında başladı!\n"
+        f"1 ile 100 arasında bir sayı tuttum."
     )
+
+
+@bot.event
+async def on_message(message):
+
+    if message.author.bot:
+        return
+
+    if message.channel.id in number_games:
+
+        try:
+            guess = int(message.content)
+        except ValueError:
+            guess = None
+
+        if guess is not None:
+
+            answer = number_games[message.channel.id]
+
+            if guess == answer:
+
+                await message.channel.send(
+                    f"🎉 Tebrikler {message.author.mention}! "
+                    f"Sayıyı doğru bildin: **{answer}**"
+                )
+
+                del number_games[message.channel.id]
+
+            elif guess < answer:
+                await message.channel.send(
+                    "📈 Daha büyük bir sayı dene!"
+                )
+
+            else:
+                await message.channel.send(
+                    "📉 Daha küçük bir sayı dene!"
+                )
+
+    await bot.process_commands(message)
 
 
 # =========================================================
 # KELİME OYUNU
 # =========================================================
 
+word_games = {}
+
+words = [
+    "elma",
+    "armut",
+    "kalem",
+    "kitap",
+    "masa",
+    "telefon",
+    "bilgisayar",
+    "futbol",
+    "discord",
+    "sunucu",
+    "oyun",
+    "araba",
+    "ev",
+    "okul",
+    "deniz"
+]
+
+
 @bot.tree.command(
-    name="kelime-ayarla",
-    description="Kelime oyunu kanalını ayarlar."
+    name="kelime-oyunu",
+    description="Yönetici tarafından kelime oyunu başlatır."
 )
-@app_commands.describe(kanal="Kelime oyunu kanalı")
-@admin_only()
-async def word_setup(
-    interaction: discord.Interaction,
+@app_commands.describe(
+    kanal="Oyunun oynanacağı kanal"
+)
+async def kelime_oyunu(
+    interaction,
     kanal: discord.TextChannel
 ):
 
-    data = guild_config(interaction.guild.id)
+    if not is_admin(interaction):
+        await interaction.response.send_message(
+            "Bu oyunu sadece yöneticiler başlatabilir.",
+            ephemeral=True
+        )
+        return
 
-    data["word_channel"] = kanal.id
-    data["word_last"] = None
+    word = random.choice(words)
 
-    save_config()
+    word_games[kanal.id] = word
 
     await interaction.response.send_message(
-        f"🔤 Kelime oyunu {kanal.mention} kanalında başlatıldı."
+        f"🔤 Kelime oyunu **{kanal.mention}** kanalında başladı!\n"
+        f"Kelime: **{word[0]}{'_' * (len(word) - 1)}**"
     )
 
 
 # =========================================================
-# MODERASYON
+# /TEMİZLE
 # =========================================================
 
 @bot.tree.command(
     name="temizle",
-    description="Mesajları siler."
+    description="Mesajları temizler."
 )
-@app_commands.describe(miktar="Silinecek mesaj miktarı")
-@admin_only()
-async def clear(
-    interaction: discord.Interaction,
-    miktar: app_commands.Range[int, 1, 100]
+@app_commands.describe(
+    miktar="Silinecek mesaj sayısı"
+)
+async def temizle(
+    interaction,
+    miktar: int
 ):
+
+    if not is_admin(interaction):
+        await interaction.response.send_message(
+            "Bu komutu kullanmak için Yönetici yetkisi gerekiyor.",
+            ephemeral=True
+        )
+        return
+
+    if miktar < 1 or miktar > 100:
+        await interaction.response.send_message(
+            "1 ile 100 arasında bir sayı gir.",
+            ephemeral=True
+        )
+        return
 
     await interaction.response.defer(ephemeral=True)
 
-    deleted = await interaction.channel.purge(
-        limit=miktar
-    )
+    deleted = await interaction.channel.purge(limit=miktar)
 
     await interaction.followup.send(
-        f"🧹 `{len(deleted)}` mesaj silindi.",
+        f"🧹 **{len(deleted)}** mesaj silindi.",
         ephemeral=True
     )
 
 
-@bot.tree.command(
-    name="timeout",
-    description="Kullanıcıya timeout verir."
-)
-@app_commands.describe(
-    kullanici="Timeout verilecek kullanıcı",
-    dakika="Dakika"
-)
-@admin_only()
-async def timeout(
-    interaction: discord.Interaction,
-    kullanici: discord.Member,
-    dakika: app_commands.Range[int, 1, 10080]
-):
-
-    if kullanici == interaction.user:
-        return await interaction.response.send_message(
-            "Kendine timeout veremezsin.",
-            ephemeral=True
-        )
-
-    until = discord.utils.utcnow() + timedelta(
-        minutes=dakika
-    )
-
-    try:
-        await kullanici.timeout(
-            until,
-            reason=f"{interaction.user} tarafından uygulandı."
-        )
-
-        await interaction.response.send_message(
-            f"⏱️ {kullanici.mention} `{dakika}` dakika timeout aldı."
-        )
-
-        await send_log(
-            interaction.guild,
-            "Timeout",
-            f"{kullanici.mention} → {dakika} dakika\n"
-            f"Yetkili: {interaction.user.mention}"
-        )
-
-    except discord.Forbidden:
-        await interaction.response.send_message(
-            "Bu kullanıcıya timeout veremiyorum.",
-            ephemeral=True
-        )
-
-
-@bot.tree.command(
-    name="kick",
-    description="Kullanıcıyı sunucudan atar."
-)
-@app_commands.describe(kullanici="Atılacak kullanıcı")
-@admin_only()
-async def kick(
-    interaction: discord.Interaction,
-    kullanici: discord.Member
-):
-
-    try:
-        await kullanici.kick(
-            reason=f"{interaction.user} tarafından atıldı."
-        )
-
-        await interaction.response.send_message(
-            f"👢 {kullanici.mention} sunucudan atıldı."
-        )
-
-        await send_log(
-            interaction.guild,
-            "Kick",
-            f"Kullanıcı: {kullanici.mention}\n"
-            f"Yetkili: {interaction.user.mention}"
-        )
-
-    except discord.Forbidden:
-        await interaction.response.send_message(
-            "Bu kullanıcıyı atamıyorum.",
-            ephemeral=True
-        )
-
-
-@bot.tree.command(
-    name="ban",
-    description="Kullanıcıyı yasaklar."
-)
-@app_commands.describe(kullanici="Yasaklanacak kullanıcı")
-@admin_only()
-async def ban(
-    interaction: discord.Interaction,
-    kullanici: discord.Member
-):
-
-    try:
-        await kullanici.ban(
-            reason=f"{interaction.user} tarafından yasaklandı."
-        )
-
-        await interaction.response.send_message(
-            f"🔨 {kullanici.mention} yasaklandı."
-        )
-
-        await send_log(
-            interaction.guild,
-            "Ban",
-            f"Kullanıcı: {kullanici.mention}\n"
-            f"Yetkili: {interaction.user.mention}"
-        )
-
-    except discord.Forbidden:
-        await interaction.response.send_message(
-            "Bu kullanıcıyı yasaklayamıyorum.",
-            ephemeral=True
-        )
-
-
-@bot.tree.command(
-    name="kilitle",
-    description="Bulunduğun kanalı kilitler."
-)
-@admin_only()
-async def lock(interaction: discord.Interaction):
-
-    overwrite = interaction.channel.overwrites_for(
-        interaction.guild.default_role
-    )
-
-    overwrite.send_messages = False
-
-    await interaction.channel.set_permissions(
-        interaction.guild.default_role,
-        overwrite=overwrite
-    )
-
-    await interaction.response.send_message(
-        "🔒 Kanal kilitlendi."
-    )
-
-
-@bot.tree.command(
-    name="kilit-ac",
-    description="Kanal kilidini açar."
-)
-@admin_only()
-async def unlock(interaction: discord.Interaction):
-
-    overwrite = interaction.channel.overwrites_for(
-        interaction.guild.default_role
-    )
-
-    overwrite.send_messages = None
-
-    await interaction.channel.set_permissions(
-        interaction.guild.default_role,
-        overwrite=overwrite
-    )
-
-    await interaction.response.send_message(
-        "🔓 Kanalın kilidi açıldı."
-    )
-
-
-@bot.tree.command(
-    name="yavas-mod",
-    description="Kanala yavaş mod verir."
-)
-@app_commands.describe(
-    saniye="Yavaş mod süresi"
-)
-@admin_only()
-async def slowmode(
-    interaction: discord.Interaction,
-    saniye: app_commands.Range[int, 0, 21600]
-):
-
-    await interaction.channel.edit(
-        slowmode_delay=saniye
-    )
-
-    await interaction.response.send_message(
-        f"🐌 Yavaş mod `{saniye}` saniye olarak ayarlandı."
-    )
-
-
 # =========================================================
-# MESAJ OLAYLARI
+# DM MODAL
 # =========================================================
 
-@bot.event
-async def on_message(message: discord.Message):
+class DMModal(discord.ui.Modal):
 
-    if message.author.bot:
-        return
+    def __init__(self, role_id):
+        super().__init__(title="DM Duyurusu")
+        self.role_id = role_id
 
-    if message.guild:
+        self.baslik = discord.ui.TextInput(
+            label="Başlık",
+            placeholder="Duyuru başlığı",
+            max_length=256
+        )
 
-        data = guild_config(message.guild.id)
+        self.mesaj = discord.ui.TextInput(
+            label="Mesaj",
+            placeholder="Gönderilecek mesaj",
+            style=discord.TextStyle.paragraph,
+            max_length=4000
+        )
 
-        # -------------------------
-        # SAYI SAYMA
-        # -------------------------
+        self.add_item(self.baslik)
+        self.add_item(self.mesaj)
 
-        counting_channel = data.get("counting_channel")
+    async def on_submit(self, interaction):
 
-        if counting_channel == message.channel.id:
+        settings = get_guild_settings(interaction.guild.id)
 
-            expected = data.get("counting_number", 0) + 1
+        allowed_role = settings.get("dm_role")
+
+        if allowed_role is None:
+            await interaction.response.send_message(
+                "DM gönderme yetkili rolü `/ayarlar` üzerinden ayarlanmamış.",
+                ephemeral=True
+            )
+            return
+
+        if allowed_role not in [r.id for r in interaction.user.roles]:
+            await interaction.response.send_message(
+                "DM duyurusu göndermek için ayarlanmış role sahip değilsin.",
+                ephemeral=True
+            )
+            return
+
+        role = interaction.guild.get_role(self.role_id)
+
+        if role is None:
+            await interaction.response.send_message(
+                "Belirtilen rol bulunamadı.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        sent = 0
+        failed = 0
+
+        for member in role.members:
+
+            if member.bot:
+                continue
 
             try:
-                number = int(message.content.strip())
-            except ValueError:
-                await message.delete()
-                return
 
-            if number != expected:
-
-                await message.delete()
-
-                data["counting_number"] = 0
-
-                save_config()
-
-                await message.channel.send(
-                    f"❌ Yanlış sayı! Oyun sıfırlandı.\n"
-                    f"Yeni başlangıç: **1**",
-                    delete_after=4
+                embed = discord.Embed(
+                    title=self.baslik.value,
+                    description=self.mesaj.value,
+                    color=discord.Color.blue()
                 )
 
-                return
+                embed.set_footer(text="Dynex")
 
-            data["counting_number"] = number
+                await member.send(embed=embed)
 
-            save_config()
+                sent += 1
 
-            await message.add_reaction("✅")
+            except Exception:
+                failed += 1
 
-        # -------------------------
-        # KELİME OYUNU
-        # -------------------------
+            await asyncio.sleep(0.3)
 
-        word_channel = data.get("word_channel")
-
-        if word_channel == message.channel.id:
-
-            word = message.content.strip().lower()
-
-            if (
-                word
-                and word.isalpha()
-                and len(word) >= 2
-            ):
-
-                last_word = data.get("word_last")
-
-                if last_word:
-
-                    last_letter = last_word[-1]
-
-                    if not word.startswith(last_letter):
-                        await message.delete()
-
-                        await message.channel.send(
-                            f"❌ Bu kelime **{last_letter}** harfiyle başlamalı.",
-                            delete_after=3
-                        )
-
-                        return
-
-                data["word_last"] = word
-
-                save_config()
-
-                await message.add_reaction("🔤")
-
-    await bot.process_commands(message)
+        await interaction.followup.send(
+            f"📨 DM duyurusu tamamlandı.\n\n"
+            f"Başarılı: **{sent}**\n"
+            f"Başarısız: **{failed}**",
+            ephemeral=True
+        )
 
 
 # =========================================================
-# HATA YÖNETİMİ
+# /DM
+# =========================================================
+
+@bot.tree.command(
+    name="dm",
+    description="Bir role sahip kullanıcılara DM duyurusu gönder."
+)
+@app_commands.describe(
+    rol="DM gönderilecek rol"
+)
+async def dm(
+    interaction,
+    rol: discord.Role
+):
+
+    settings = get_guild_settings(interaction.guild.id)
+
+    allowed_role = settings.get("dm_role")
+
+    if allowed_role is None:
+        await interaction.response.send_message(
+            "Önce `/ayarlar` üzerinden DM duyuru kullanma rolünü ayarla.",
+            ephemeral=True
+        )
+        return
+
+    if allowed_role not in [r.id for r in interaction.user.roles]:
+        await interaction.response.send_message(
+            "Bu komutu kullanma yetkin yok.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_modal(
+        DMModal(rol.id)
+    )
+
+
+# =========================================================
+# HATA YAKALAMA
 # =========================================================
 
 @bot.tree.error
 async def on_app_command_error(
     interaction: discord.Interaction,
-    error
+    error: app_commands.AppCommandError
 ):
 
-    if isinstance(error, app_commands.CheckFailure):
-
-        text = str(error)
-
-        if not text:
-            text = "Bu komutu kullanmak için gerekli yetkiye sahip değilsin."
-
-        if interaction.response.is_done():
-            await interaction.followup.send(
-                text,
-                ephemeral=True
-            )
-        else:
-            await interaction.response.send_message(
-                text,
-                ephemeral=True
-            )
-
-        return
-
-    if isinstance(error, app_commands.CommandOnCooldown):
-
-        text = (
-            f"Bu komutu tekrar kullanmak için "
-            f"`{error.retry_after:.1f}` saniye beklemelisin."
-        )
-
-        if interaction.response.is_done():
-            await interaction.followup.send(
-                text,
-                ephemeral=True
-            )
-        else:
-            await interaction.response.send_message(
-                text,
-                ephemeral=True
-            )
-
-        return
-
     print(
-        f"Komut hatası "
-        f"({interaction.command.name if interaction.command else 'bilinmeyen'}):",
+        f"Slash komut hatası "
+        f"({getattr(interaction.command, 'name', 'bilinmiyor')}):",
         repr(error)
     )
 
     try:
+
+        message = "Komut çalıştırılırken bir hata oluştu."
+
+        if isinstance(error, app_commands.MissingPermissions):
+            message = "Bu komutu kullanmak için gerekli yetkiye sahip değilsin."
+
         if interaction.response.is_done():
             await interaction.followup.send(
-                "Komut çalıştırılırken bir hata oluştu.",
+                message,
                 ephemeral=True
             )
         else:
             await interaction.response.send_message(
-                "Komut çalıştırılırken bir hata oluştu.",
+                message,
                 ephemeral=True
             )
-    except Exception:
-        pass
+
+    except Exception as e:
+        print("Hata mesajı gönderilemedi:", repr(e))
 
 
 # =========================================================
-# ÇALIŞTIR
+# BAŞLAT
 # =========================================================
 
 if not TOKEN:
     raise RuntimeError(
-        "DISCORD_TOKEN değişkeni bulunamadı."
+        "DISCORD_TOKEN bulunamadı. Hosting panelindeki Variables "
+        "bölümüne DISCORD_TOKEN ekle."
     )
 
 bot.run(TOKEN)
